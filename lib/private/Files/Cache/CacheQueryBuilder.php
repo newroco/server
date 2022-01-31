@@ -103,4 +103,17 @@ class CacheQueryBuilder extends QueryBuilder {
 
 		return $this;
 	}
+
+	public function wherePathHashIn($filePathHashes) {
+		$alias = $this->alias;
+		if ($alias) {
+			$alias .= '.';
+		} else {
+			$alias = '';
+		}
+
+		$this->andWhere($this->expr()->in("{$alias}path_hash", $this->createNamedParameter($filePathHashes, IQueryBuilder::PARAM_STR_ARRAY)));
+
+		return $this;
+	}
 }

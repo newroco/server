@@ -244,6 +244,38 @@ class Cache implements ICache {
 		return [];
 	}
 
+	public function getSelectedFileFromFolderContents($folder, array $filePaths)
+	{
+		$fileId = $this->getId($folder);
+
+		if ($fileId <= -1) {
+			return [];
+		}
+
+		$filePathHashes = array_map(function($filePath) use ($folder) {
+			return md5("$folder/$filePath");
+		}, $filePaths);
+
+		$query = $this->getQueryBuilder();
+
+		$query->selectFileCache()
+			->whereParent($fileId);
+
+		if (count($filePathHashes) > 0) {
+			$query->wherePathHashIn($filePathHashes);
+		}
+
+		$query->orderBy('name', 'ASC');
+
+		$result = $query->execute();
+		$files = $result->fetchAll();
+		$result->closeCursor();
+
+		return array_map(function (array $data) {
+			return self::cacheEntryFromData($data, $this->mimetypeLoader);
+		}, $files);
+	}
+
 	/**
 	 * insert or update meta data for a file or folder
 	 *

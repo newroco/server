@@ -29,6 +29,7 @@
 namespace OCA\Files_Trashbin;
 
 use OC\Files\Filesystem;
+use OC\Files\ObjectStore\ObjectStoreStorage;
 use OC\Files\Storage\Wrapper\Wrapper;
 use OCA\Files_Trashbin\Events\MoveToTrashEvent;
 use OCA\Files_Trashbin\Trash\ITrashManager;
@@ -249,6 +250,114 @@ class Storage extends Wrapper {
 			}
 			throw $e;
 		}
+	}
+
+	/**
+	 * @param IStorage $sourceStorage
+	 * @param $sourceInternalPath
+	 * @param $targetInternalPath
+	 * @return array
+	 * @throws \Exception
+	 */
+	public function moveItemRecursively(IStorage $sourceStorage, $sourceInternalPath, $targetInternalPath)
+	{
+		if ( ! $this->file_exists($targetInternalPath)) {
+			$this->getUpdater()->renameFromStorage($sourceStorage, $sourceInternalPath, $targetInternalPath);
+
+			return $this->moveItemFromStorage($sourceStorage, $sourceInternalPath, $targetInternalPath);
+		}
+
+		if ($this->is_file($targetInternalPath)) {
+			$pathParts = pathinfo($targetInternalPath);
+
+			$iterator = 1;
+			while ($this->file_exists($targetInternalPath)) {
+				$targetInternalPath = $pathParts['dirname'] .
+					'/' .
+					$pathParts['filename'] .
+					' (' .
+					$iterator .
+					')' .
+					'.' .
+					$pathParts['extension'];
+
+				$iterator += 1;
+			}
+
+			return $this->moveItemRecursively($sourceStorage, $sourceInternalPath, $targetInternalPath);
+		}
+
+		$allItemsSuccessfullyMoved = true;
+
+		$itemsInDirectory = $sourceStorage->getDirectoryContent($sourceInternalPath);
+
+		foreach ($itemsInDirectory as $item) {
+			$sourceItemName = $item['name'];
+
+			$sourceItem = "$sourceInternalPath/$sourceItemName";
+			$targetItem = "$targetInternalPath/$sourceItemName";
+
+			[$success, $shouldStop] = $this->moveItemRecursively($sourceStorage, $sourceItem, $targetItem);
+
+			if ($shouldStop) {
+				return [$success, true];
+			}
+
+			if ( ! $success) {
+				$allItemsSuccessfullyMoved = false;
+			}
+		}
+
+		$sourceStorage->unlink($sourceInternalPath);
+		$sourceStorage->getUpdater()->remove($sourceInternalPath);
+
+		return [$allItemsSuccessfullyMoved, false];
+	}
+
+	/**
+	 * @param IStorage $sourceStorage
+	 * @param $sourceInternalPath
+	 * @param $targetInternalPath
+	 * @return array
+	 * @throws \Exception
+	 */
+	public function moveItemFromStorage(IStorage $sourceStorage, $sourceInternalPath, $targetInternalPath)
+	{
+		try {
+			// when moving within the same object store, the cache update done above is enough to move the file
+			if (!($this->instanceOfStorage(ObjectStoreStorage::class) && $this->getId() === $sourceStorage->getId())) {
+				$this->moveFromStorage($sourceStorage, $sourceInternalPath, $targetInternalPath);
+			}
+
+			$success = true;
+		} catch (\OCA\Files_Trashbin\Exceptions\CopyRecursiveException $e) {
+			if ($this->file_exists($targetInternalPath)) {
+				$this->unlink($targetInternalPath);
+			}
+
+			\OC::$server->getLogger()->error('Couldn\'t move ' . $sourceInternalPath . ' to the trash bin', ['app' => 'files_trashbin']);
+
+			$success = false;
+		}
+
+		if ($sourceStorage->file_exists($sourceInternalPath)) { // failed to delete the original file, abort
+			if ($sourceStorage->is_dir($sourceInternalPath)) {
+				$sourceStorage->rmdir($sourceInternalPath);
+			} else {
+				$sourceStorage->unlink($sourceInternalPath);
+			}
+
+			if ($sourceStorage->file_exists($sourceInternalPath)) {
+				// undo the cache move
+				$sourceStorage->getUpdater()->renameFromStorage($this, $targetInternalPath, $sourceInternalPath);
+			} else {
+				$this->getUpdater()->remove($targetInternalPath);
+			}
+
+			return [$success, true];
+		}
+
+		return [$success, false];
 	}
 
 	protected function disableTrash() {

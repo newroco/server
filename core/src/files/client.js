@@ -523,7 +523,10 @@ import escapeHTML from 'escape-html'
 			this._client.propFind(
 				this._buildUrl(path),
 				properties,
-				1
+				1,
+				{
+					'x-test-123': '123',
+				}
 			).then(function(result) {
 				if (self._isSuccessStatus(result.status)) {
 					const results = self._parseResult(result.body)
