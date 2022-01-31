@@ -85,16 +85,38 @@ class TrashRoot implements ICollection {
 	}
 
 	public function getChild($name): ITrash {
-		$entries = $this->getChildren();
+		$entries = $this->trashManager->findInTrashRoot($this->user, $name);
 
-		foreach ($entries as $entry) {
-			if ($entry->getName() === $name) {
-				return $entry;
+		$children = array_map(function (ITrashItem $entry) {
+			if ($entry->getType() === FileInfo::TYPE_FOLDER) {
+				return new TrashFolder($this->trashManager, $entry);
+			}
+			return new TrashFile($this->trashManager, $entry);
+		}, $entries);
+
+		foreach ($children as $child) {
+			if ($child->getName() === $name) {
+				return $child;
 			}
 		}
 
 		throw new NotFound();
 	}
+
+//	public function getChild($name): ITrash {
+//		$entries = $this->getChildren();
+//
+//		foreach ($entries as $entry) {
+//			echo $entry->getName();
+//			echo '++++++++++++';
+//
+//			if ($entry->getName() === $name) {
+//				return $entry;
+//			}
+//		}
+//
+//		throw new NotFound();
+//	}
 
 	public function childExists($name): bool {
 		try {

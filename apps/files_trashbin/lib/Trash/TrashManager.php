@@ -52,6 +52,27 @@ class TrashManager implements ITrashManager {
 		return $items;
 	}
 
+	public function findInTrashRoot(IUser $user, $name) {
+		$children = [];
+
+		foreach ($this->getBackends() as $backend) {
+			// Use list trash folder? We need to retrieve the TrashItem with the $name
+			$items = $backend->listTrashRoot($user);
+
+			foreach ($items as $item) {
+				if (str_contains($name, $item->getName())) {
+					$children[] = $item;
+				}
+			}
+		}
+
+		usort($children, function (ITrashItem $a, ITrashItem $b) {
+			return $b->getDeletedTime() - $a->getDeletedTime();
+		});
+
+		return $children;
+	}
+
 	private function getBackendForItem(ITrashItem $item) {
 		return $item->getTrashBackend();
 	}

@@ -60,11 +60,32 @@ class Helper {
 		$absoluteDir = $view->getAbsolutePath($dir);
 		$internalPath = $mount->getInternalPath($absoluteDir);
 
-		$originalLocations = \OCA\Files_Trashbin\Trashbin::getLocations($user);
-		$dirContent = $storage->getCache()->getFolderContents($mount->getInternalPath($view->getAbsolutePath($dir)));
+		$filePaths = [];
+
+		if ($dir === '/') {
+			$originalLocations = \OCA\Files_Trashbin\Trashbin::getLocations($user);
+
+			foreach (array_values($originalLocations) as $originalLocation) {
+				if ( isset($originalLocation['timestamp'])) {
+					$filePaths[] = $originalLocation['id'] . '.d' . $originalLocation['timestamp'];
+
+					continue;
+				}
+
+				foreach (array_values($originalLocation) as $item) {
+					$filePaths[] = $item['id'] . '.d' . $item['timestamp'];
+				}
+			}
+		}
+
+		$rootId = $mount->getInternalPath($view->getAbsolutePath($dir));
+
+		$dirContent = $storage->getCache()->getSelectedFileFromFolderContents($rootId, $filePaths);
+
 		foreach ($dirContent as $entry) {
 			$entryName = $entry->getName();
 			$name = $entryName;
+
 			if ($dir === '' || $dir === '/') {
 				$pathparts = pathinfo($entryName);
 				$timestamp = substr($pathparts['extension'], 1);
@@ -74,14 +95,17 @@ class Helper {
 				$parts = explode('/', ltrim($dir, '/'));
 				$timestamp = substr(pathinfo($parts[0], PATHINFO_EXTENSION), 1);
 			}
+
 			$originalPath = '';
 			$originalName = substr($entryName, 0, -strlen($timestamp) - 2);
-			if (isset($originalLocations[$originalName][$timestamp])) {
-				$originalPath = $originalLocations[$originalName][$timestamp];
+
+			if (isset($originalLocations[$originalName][$timestamp]['location'])) {
+				$originalPath = $originalLocations[$originalName][$timestamp]['location'];
 				if (substr($originalPath, -1) === '/') {
 					$originalPath = substr($originalPath, 0, -1);
 				}
 			}
+
 			$type = $entry->getMimeType() === ICacheEntry::DIRECTORY_MIMETYPE ? 'dir' : 'file';
 			$i = [
 				'name' => $name,
@@ -94,6 +118,7 @@ class Helper {
 				'permissions' => Constants::PERMISSION_ALL - Constants::PERMISSION_SHARE,
 				'fileid' => $entry->getId(),
 			];
+
 			if ($originalPath) {
 				if ($originalPath !== '.') {
 					$i['extraData'] = $originalPath . '/' . $originalName;
@@ -101,12 +126,14 @@ class Helper {
 					$i['extraData'] = $originalName;
 				}
 			}
+
 			$result[] = new FileInfo($absoluteDir . '/' . $i['name'], $storage, $internalPath . '/' . $i['name'], $i, $mount);
 		}
 
 		if ($sortAttribute !== '') {
 			return \OCA\Files\Helper::sortFiles($result, $sortAttribute, $sortDescending);
 		}
+
 		return $result;
 	}
 
