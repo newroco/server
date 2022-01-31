@@ -36,6 +36,18 @@ class FakeManager implements ICommentsManager {
 		return [];
 	}
 
+	public function getCommentsWithVerbForObjectSinceComment(
+		string $objectType,
+		string $objectId,
+		array $verbs,
+		int $lastKnownCommentId,
+		string $sortDirection = 'asc',
+		int $limit = 30,
+		bool $includeLastKnown = false
+	): array {
+		return [];
+	}
+
 	public function getNumberOfCommentsForObject($objectType, $objectId, \DateTime $notOlderThan = null, $verb = '') {
 	}
 
@@ -98,6 +110,10 @@ class FakeManager implements ICommentsManager {
 	}
 
 	public function getNumberOfCommentsForObjectSinceComment(string $objectType, string $objectId, int $lastRead, string $verb = ''): int {
+		return 0;
+	}
+
+	public function getNumberOfCommentsWithVerbsForObjectSinceComment(string $objectType, string $objectId, int $lastRead, array $verbs): int {
 		return 0;
 	}
 

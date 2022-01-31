@@ -22,8 +22,7 @@
 
 <template>
 	<div class="biography">
-		<textarea
-			id="biography"
+		<textarea id="biography"
 			:placeholder="t('settings', 'Your biography')"
 			:value="biography"
 			rows="8"
@@ -137,7 +136,9 @@ export default {
 		font-family: var(--font-face);
 		cursor: text;
 
-		&:hover {
+		&:hover,
+		&:focus,
+		&:active {
 			border-color: var(--color-primary-element) !important;
 			outline: none !important;
 		}

@@ -593,7 +593,12 @@ class Share extends Constants {
 				$row['share_with_displayname'] = $shareWithUser === null ? $row['share_with'] : $shareWithUser->getDisplayName();
 			} elseif (isset($row['share_with']) && $row['share_with'] != '' &&
 				$row['share_type'] === IShare::TYPE_REMOTE) {
-				$addressBookEntries = \OC::$server->getContactsManager()->search($row['share_with'], ['CLOUD']);
+				$addressBookEntries = \OC::$server->getContactsManager()->search($row['share_with'], ['CLOUD'], [
+					'limit' => 1,
+					'enumeration' => false,
+					'fullmatch' => false,
+					'strict_search' => true,
+				]);
 				foreach ($addressBookEntries as $entry) {
 					foreach ($entry['CLOUD'] as $cloudID) {
 						if ($cloudID === $row['share_with']) {
@@ -842,7 +847,7 @@ class Share extends Constants {
 	 * @param array $parameters additional format parameters
 	 * @return array format result
 	 */
-	private static function formatResult($items, $column, $backend, $format = self::FORMAT_NONE , $parameters = null) {
+	private static function formatResult($items, $column, $backend, $format = self::FORMAT_NONE, $parameters = null) {
 		if ($format === self::FORMAT_NONE) {
 			return $items;
 		} elseif ($format === self::FORMAT_STATUSES) {

@@ -1,4 +1,7 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * @copyright Copyright (c) 2016, ownCloud, Inc.
  *
@@ -83,6 +86,12 @@ class TwoFactorMiddleware extends Middleware {
 	 * @param string $methodName
 	 */
 	public function beforeController($controller, $methodName) {
+		if ($this->reflector->hasAnnotation('NoTwoFactorRequired')) {
+			// Route handler explicitly marked to work without finished 2FA are
+			// not blocked
+			return;
+		}
+
 		if ($controller instanceof APIController && $methodName === 'poll') {
 			// Allow polling the twofactor nextcloud notifications state
 			return;
@@ -103,7 +112,7 @@ class TwoFactorMiddleware extends Middleware {
 			&& $this->twoFactorManager->needsSecondFactor($this->userSession->getUser())) {
 			$providers = $this->twoFactorManager->getProviderSet($this->userSession->getUser());
 
-			if ($providers->getProviders() === [] && !$providers->isProviderMissing()) {
+			if ($providers->getPrimaryProviders() === [] && !$providers->isProviderMissing()) {
 				return;
 			}
 		}

@@ -54,7 +54,7 @@ class AccountProperty implements IAccountProperty {
 		$this->verificationData = $verificationData;
 	}
 
-	public function jsonSerialize() {
+	public function jsonSerialize(): array {
 		return [
 			'name' => $this->getName(),
 			'value' => $this->getValue(),
@@ -152,6 +152,7 @@ class AccountProperty implements IAccountProperty {
 
 		switch ($scope) {
 			case IAccountManager::VISIBILITY_PRIVATE:
+			case '':
 				return IAccountManager::SCOPE_LOCAL;
 			case IAccountManager::VISIBILITY_CONTACTS_ONLY:
 				return IAccountManager::SCOPE_FEDERATED;

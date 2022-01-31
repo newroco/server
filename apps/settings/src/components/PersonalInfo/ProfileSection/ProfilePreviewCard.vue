@@ -21,12 +21,10 @@
 -->
 
 <template>
-	<a
-		class="preview-card"
+	<a class="preview-card"
 		:class="{ disabled }"
 		:href="profilePageLink">
-		<Avatar
-			class="preview-card__avatar"
+		<Avatar class="preview-card__avatar"
 			:user="userId"
 			:size="48"
 			:show-user-status="true"
@@ -105,8 +103,15 @@ export default {
 	font-weight: bold;
 	box-shadow: 0 2px 9px var(--color-box-shadow);
 
-	&:hover {
+	&:hover,
+	&:focus,
+	&:active {
 		box-shadow: 0 2px 12px var(--color-box-shadow);
+	}
+
+	&:focus-visible {
+		outline: var(--color-main-text) solid 1px;
+		outline-offset: 3px;
 	}
 
 	&.disabled {

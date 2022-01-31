@@ -21,8 +21,7 @@
 -->
 
 <template>
-	<button
-		:disabled="disabled"
+	<button :disabled="disabled"
 		v-on="$listeners">
 		<span class="icon icon-add" />
 		{{ t('settings', 'Add') }}
@@ -61,13 +60,19 @@ export default {
 			}
 		}
 
-		&:hover {
+		&:hover,
+		&:focus,
+		&:active {
 			background-color: rgba(127, 127, 127, .15);
 		}
 
-		&:enabled:hover {
-			background-color: rgba(127, 127, 127, .25);
-			opacity: 0.8 !important;
+		&:enabled {
+			&:hover,
+			&:focus,
+			&:active {
+				background-color: rgba(127, 127, 127, .25);
+				opacity: 0.8 !important;
+			}
 		}
 	}
 </style>

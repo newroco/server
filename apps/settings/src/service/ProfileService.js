@@ -3,7 +3,7 @@
  *
  * @author Christopher Ng <chrng8@gmail.com>
  *
- * @license GNU AGPL version 3 or any later version
+ * @license AGPL-3.0-or-later
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -30,9 +30,9 @@ import confirmPassword from '@nextcloud/password-confirmation'
  *
  * @param {string} paramId the profile parameter ID
  * @param {string} visibility the visibility
- * @returns {object}
+ * @return {object}
  */
-export const saveProfileParameterVisibility = async(paramId, visibility) => {
+export const saveProfileParameterVisibility = async (paramId, visibility) => {
 	const userId = getCurrentUser().uid
 	const url = generateOcsUrl('/profile/{userId}', { userId })
 

@@ -43,13 +43,29 @@ interface IFunctionBuilder {
 	/**
 	 * Combines two input strings
 	 *
-	 * @param string|ILiteral|IParameter|IQueryFunction $x The first input string
-	 * @param string|ILiteral|IParameter|IQueryFunction $y The seccond input string
+	 * @param string|ILiteral|IParameter|IQueryFunction $x Expressions or literal strings
+	 * @param string|ILiteral|IParameter|IQueryFunction ...$exprs Expressions or literal strings
 	 *
 	 * @return IQueryFunction
 	 * @since 12.0.0
 	 */
-	public function concat($x, $y): IQueryFunction;
+	public function concat($x, ...$expr): IQueryFunction;
+
+	/**
+	 * Returns a string which is the concatenation of all non-NULL values of X
+	 *
+	 * Usage examples:
+	 *
+	 * groupConcat('column') -- with comma as separator (default separator)
+	 *
+	 * groupConcat('column', ';') -- with different separator
+	 *
+	 * @param string|IQueryFunction $expr The expression to group
+	 * @param string|null $separator The separator
+	 * @return IQueryFunction
+	 * @since 24.0.0
+	 */
+	public function groupConcat($expr, ?string $separator = ','): IQueryFunction;
 
 	/**
 	 * Takes a substring from the input string

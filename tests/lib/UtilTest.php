@@ -74,6 +74,18 @@ class UtilTest extends \Test\TestCase {
 		$this->assertEquals("/%C2%A7%23%40test%25%26%5E%C3%A4/-child", $result);
 	}
 
+	public function testIsNonUTF8Locale() {
+		// OC_Util::isNonUTF8Locale() assumes escapeshellcmd('§') returns '' with non-UTF-8 locale.
+		$locale = setlocale(LC_CTYPE, 0);
+		setlocale(LC_CTYPE, 'C');
+		$this->assertEquals('', escapeshellcmd('§'));
+		$this->assertEquals('\'\'', escapeshellarg('§'));
+		setlocale(LC_CTYPE, 'C.UTF-8');
+		$this->assertEquals('§', escapeshellcmd('§'));
+		$this->assertEquals('\'§\'', escapeshellarg('§'));
+		setlocale(LC_CTYPE, $locale);
+	}
+
 	public function testFileInfoLoaded() {
 		$expected = function_exists('finfo_open');
 		$this->assertEquals($expected, \OC_Util::fileInfoLoaded());
@@ -213,30 +225,97 @@ class UtilTest extends \Test\TestCase {
 
 		\OC_Util::$scripts = [];
 		\OC_Util::$styles = [];
+		self::invokePrivate(\OCP\Util::class, 'scripts', [[]]);
+		self::invokePrivate(\OCP\Util::class, 'scriptDeps', [[]]);
 	}
 	protected function tearDown(): void {
 		parent::tearDown();
 
 		\OC_Util::$scripts = [];
 		\OC_Util::$styles = [];
+		self::invokePrivate(\OCP\Util::class, 'scripts', [[]]);
+		self::invokePrivate(\OCP\Util::class, 'scriptDeps', [[]]);
 	}
 
 	public function testAddScript() {
-		\OC_Util::addScript('core', 'myFancyJSFile1');
-		\OC_Util::addScript('myApp', 'myFancyJSFile2');
-		\OC_Util::addScript('core', 'myFancyJSFile0', true);
-		\OC_Util::addScript('core', 'myFancyJSFile10', true);
+		\OCP\Util::addScript('first', 'myFirstJSFile');
+		\OCP\Util::addScript('core', 'myFancyJSFile1');
+		\OCP\Util::addScript('files', 'myFancyJSFile2', 'core');
+		\OCP\Util::addScript('myApp5', 'myApp5JSFile', 'myApp2');
+		\OCP\Util::addScript('myApp', 'myFancyJSFile3');
+		\OCP\Util::addScript('core', 'myFancyJSFile4');
+		// after itself
+		\OCP\Util::addScript('core', 'myFancyJSFile5', 'core');
 		// add duplicate
-		\OC_Util::addScript('core', 'myFancyJSFile1');
+		\OCP\Util::addScript('core', 'myFancyJSFile1');
+		// dependency chain
+		\OCP\Util::addScript('myApp4', 'myApp4JSFile', 'myApp3');
+		\OCP\Util::addScript('myApp3', 'myApp3JSFile', 'myApp2');
+		\OCP\Util::addScript('myApp2', 'myApp2JSFile', 'myApp');
 
-		$this->assertEquals([
-			'core/js/myFancyJSFile10',
-			'core/js/myFancyJSFile0',
+		$scripts = \OCP\Util::getScripts();
+
+		// Core should appear first
+		$this->assertEquals(
+			0,
+			array_search('core/js/myFancyJSFile1', $scripts, true)
+		);
+		$this->assertEquals(
+			1,
+			array_search('core/js/myFancyJSFile4', $scripts, true)
+		);
+
+		// Dependencies should appear before their children
+		$this->assertLessThan(
+			array_search('files/js/myFancyJSFile2', $scripts, true),
+			array_search('core/js/myFancyJSFile3', $scripts, true)
+		);
+		$this->assertLessThan(
+			array_search('myApp2/js/myApp2JSFile', $scripts, true),
+			array_search('myApp/js/myFancyJSFile3', $scripts, true)
+		);
+		$this->assertLessThan(
+			array_search('myApp3/js/myApp3JSFile', $scripts, true),
+			array_search('myApp2/js/myApp2JSFile', $scripts, true)
+		);
+		$this->assertLessThan(
+			array_search('myApp4/js/myApp4JSFile', $scripts, true),
+			array_search('myApp3/js/myApp3JSFile', $scripts, true)
+		);
+		$this->assertLessThan(
+			array_search('myApp5/js/myApp5JSFile', $scripts, true),
+			array_search('myApp2/js/myApp2JSFile', $scripts, true)
+		);
+
+		// No duplicates
+		$this->assertEquals(
+			$scripts,
+			array_unique($scripts)
+		);
+
+		// All scripts still there
+		$scripts = [
 			'core/js/myFancyJSFile1',
-			'myApp/l10n/en',
-			'myApp/js/myFancyJSFile2',
-		], \OC_Util::$scripts);
-		$this->assertEquals([], \OC_Util::$styles);
+			'core/js/myFancyJSFile4',
+			'files/js/myFancyJSFile2',
+			'core/js/myFancyJSFile5',
+			'myApp/js/myFancyJSFile3',
+			'myApp2/js/myApp2JSFile',
+			'myApp3/js/myApp3JSFile',
+			'myApp4/js/myApp4JSFile',
+		];
+		foreach ($scripts as $script) {
+			$this->assertContains($script, $scripts);
+		}
+	}
+
+	public function testAddScriptCircularDependency() {
+		\OCP\Util::addScript('circular', 'file1', 'dependency');
+		\OCP\Util::addScript('dependency', 'file2', 'circular');
+
+		$scripts = \OCP\Util::getScripts();
+		$this->assertContains('circular/js/file1', $scripts);
+		$this->assertContains('dependency/js/file2', $scripts);
 	}
 
 	public function testAddVendorScript() {
@@ -297,5 +376,12 @@ class UtilTest extends \Test\TestCase {
 			'core/vendor/myFancyCSSFile1',
 			'myApp/vendor/myFancyCSSFile2',
 		], \OC_Util::$styles);
+	}
+
+	public function testShortenMultibyteString() {
+		$this->assertEquals('Short nuff', \OCP\Util::shortenMultibyteString('Short nuff', 255));
+		$this->assertEquals('ABC', \OCP\Util::shortenMultibyteString('ABCDEF', 3));
+		// each of the characters is 12 bytes
+		$this->assertEquals('🙈', \OCP\Util::shortenMultibyteString('🙈🙊🙉', 16, 2));
 	}
 }

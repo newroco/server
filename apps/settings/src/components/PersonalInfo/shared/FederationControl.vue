@@ -21,8 +21,7 @@
 -->
 
 <template>
-	<Actions
-		:class="{ 'federation-actions': !additional, 'federation-actions--additional': additional }"
+	<Actions :class="{ 'federation-actions': !additional, 'federation-actions--additional': additional }"
 		:aria-label="ariaLabel"
 		:default-icon="scopeIcon"
 		:disabled="disabled">
@@ -185,7 +184,9 @@ export default {
 	.federation-actions--additional {
 		opacity: 0.4 !important;
 
-		&:hover {
+		&:hover,
+		&:focus,
+		&:active {
 			opacity: 0.8 !important;
 		}
 	}

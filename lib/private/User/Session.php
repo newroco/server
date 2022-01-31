@@ -123,7 +123,7 @@ class Session implements IUserSession, Emitter {
 	 * @param Manager $manager
 	 * @param ISession $session
 	 * @param ITimeFactory $timeFactory
-	 * @param IProvider $tokenProvider
+	 * @param IProvider|null $tokenProvider
 	 * @param IConfig $config
 	 * @param ISecureRandom $random
 	 * @param ILockdownManager $lockdownManager
@@ -132,7 +132,7 @@ class Session implements IUserSession, Emitter {
 	public function __construct(Manager $manager,
 								ISession $session,
 								ITimeFactory $timeFactory,
-								$tokenProvider,
+								?IProvider $tokenProvider,
 								IConfig $config,
 								ISecureRandom $random,
 								ILockdownManager $lockdownManager,
@@ -681,7 +681,7 @@ class Session implements IUserSession, Emitter {
 			// User does not exist
 			return false;
 		}
-		$name = isset($request->server['HTTP_USER_AGENT']) ? $request->server['HTTP_USER_AGENT'] : 'unknown browser';
+		$name = isset($request->server['HTTP_USER_AGENT']) ? utf8_encode($request->server['HTTP_USER_AGENT']) : 'unknown browser';
 		try {
 			$sessionId = $this->session->getId();
 			$pwd = $this->getPassword($password);

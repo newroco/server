@@ -26,7 +26,7 @@
  * @author Thomas Tanghus <thomas@tanghus.net>
  * @author Vincent Petry <vincent@nextcloud.com>
  *
- * @license GNU AGPL version 3 or any later version
+ * @license AGPL-3.0-or-later
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -304,20 +304,15 @@ const Dialogs = {
 				multiselect = false
 			}
 
-			// No grid for IE!
-			if (OC.Util.isIE()) {
-				self.$filePicker.find('#picker-view-toggle').remove()
-				self.$filePicker.find('#picker-filestable').removeClass('view-grid')
-			}
+			self.$filePicker.find('#picker-view-toggle').remove()
+			self.$filePicker.find('#picker-filestable').removeClass('view-grid')
 
 			$('body').append(self.$filePicker)
 
 			self.$showGridView = $('input#picker-showgridview')
 			self.$showGridView.on('change', _.bind(self._onGridviewChange, self))
 
-			if (!OC.Util.isIE()) {
-				self._getGridSettings()
-			}
+			self._getGridSettings()
 
 			var newButton = self.$filePicker.find('.actions.creatable .button-add')
 			if (type === self.FILEPICKER_TYPE_CHOOSE && !options.allowDirectoryChooser) {
@@ -335,6 +330,7 @@ const Dialogs = {
 			})
 
 			OC.registerMenu(newButton, self.$filePicker.find('.menu'), function() {
+				$input.tooltip('hide')
 				$input.focus()
 				self.$filePicker.ocdialog('setEnterCallback', function() {
 					event.stopImmediatePropagation()
@@ -434,6 +430,9 @@ const Dialogs = {
 					event.preventDefault()
 					$form.submit()
 				}
+			})
+			$input.on('input', function(event) {
+				$input.tooltip('hide')
 			})
 
 			self.$filePicker.ready(function() {
@@ -1141,6 +1140,16 @@ const Dialogs = {
 			if (filter && filter.length > 0 && filter.indexOf('*') === -1) {
 				files = files.filter(function(file) {
 					return file.type === 'dir' || filter.indexOf(file.mimetype) !== -1
+				})
+			}
+
+			// Check if the showHidden input field exist and if it exist follow it
+			// Otherwise just show the hidden files
+			const showHiddenInput = document.getElementById('showHiddenFiles')
+			const showHidden = showHiddenInput === null || showHiddenInput.value === "1"
+			if (!showHidden) {
+				files = files.filter(function(file) {
+					return !file.name.startsWith('.')
 				})
 			}
 

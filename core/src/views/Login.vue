@@ -24,8 +24,7 @@
 		<transition name="fade" mode="out-in">
 			<div v-if="!passwordlessLogin && !resetPassword && resetPasswordTarget === ''"
 				key="login">
-				<LoginForm
-					:username.sync="user"
+				<LoginForm :username.sync="user"
 					:redirect-url="redirectUrl"
 					:direct-login="directLogin"
 					:messages="messages"
@@ -67,8 +66,7 @@
 			<div v-else-if="!loading && passwordlessLogin"
 				key="reset"
 				class="login-additional">
-				<PasswordLessLoginForm
-					:username.sync="user"
+				<PasswordLessLoginForm :username.sync="user"
 					:redirect-url="redirectUrl"
 					:inverted-colors="invertedColors"
 					:auto-complete-allowed="autoCompleteAllowed"
@@ -143,7 +141,7 @@ export default {
 	data() {
 		return {
 			loading: false,
-			user: this.username,
+			user: loadState('core', 'loginUsername', ''),
 			passwordlessLogin: false,
 			resetPassword: false,
 
@@ -151,7 +149,6 @@ export default {
 			errors: loadState('core', 'loginErrors', []),
 			messages: loadState('core', 'loginMessages', []),
 			redirectUrl: loadState('core', 'loginRedirectUrl', false),
-			username: loadState('core', 'loginUsername', ''),
 			throttleDelay: loadState('core', 'loginThrottleDelay', 0),
 			invertedColors: OCA.Theming && OCA.Theming.inverted,
 			canResetPassword: loadState('core', 'loginCanResetPassword', false),

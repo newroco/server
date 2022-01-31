@@ -155,16 +155,16 @@ class QueryBuilder implements IQueryBuilder {
 	 */
 	public function func() {
 		if ($this->connection->getDatabasePlatform() instanceof OraclePlatform) {
-			return new OCIFunctionBuilder($this->helper);
+			return new OCIFunctionBuilder($this->connection, $this, $this->helper);
 		}
 		if ($this->connection->getDatabasePlatform() instanceof SqlitePlatform) {
-			return new SqliteFunctionBuilder($this->helper);
+			return new SqliteFunctionBuilder($this->connection, $this, $this->helper);
 		}
 		if ($this->connection->getDatabasePlatform() instanceof PostgreSQL94Platform) {
-			return new PgSqlFunctionBuilder($this->helper);
+			return new PgSqlFunctionBuilder($this->connection, $this, $this->helper);
 		}
 
-		return new FunctionBuilder($this->helper);
+		return new FunctionBuilder($this->connection, $this, $this->helper);
 	}
 
 	/**
@@ -450,12 +450,12 @@ class QueryBuilder implements IQueryBuilder {
 	/**
 	 * Sets the position of the first result to retrieve (the "offset").
 	 *
-	 * @param integer $firstResult The first result to return.
+	 * @param int $firstResult The first result to return.
 	 *
 	 * @return $this This QueryBuilder instance.
 	 */
 	public function setFirstResult($firstResult) {
-		$this->queryBuilder->setFirstResult($firstResult);
+		$this->queryBuilder->setFirstResult((int) $firstResult);
 
 		return $this;
 	}
@@ -477,12 +477,16 @@ class QueryBuilder implements IQueryBuilder {
 	 * of the databases will just return an empty result set, Oracle will return
 	 * all entries.
 	 *
-	 * @param integer $maxResults The maximum number of results to retrieve.
+	 * @param int|null $maxResults The maximum number of results to retrieve.
 	 *
 	 * @return $this This QueryBuilder instance.
 	 */
 	public function setMaxResults($maxResults) {
-		$this->queryBuilder->setMaxResults($maxResults);
+		if ($maxResults === null) {
+			$this->queryBuilder->setMaxResults($maxResults);
+		} else {
+			$this->queryBuilder->setMaxResults((int) $maxResults);
+		}
 
 		return $this;
 	}
@@ -690,7 +694,7 @@ class QueryBuilder implements IQueryBuilder {
 	 *         ->from('users', 'u')
 	 * </code>
 	 *
-	 * @param string $from The table.
+	 * @param string|IQueryFunction $from The table.
 	 * @param string|null $alias The alias of the table.
 	 *
 	 * @return $this This QueryBuilder instance.
@@ -1299,7 +1303,7 @@ class QueryBuilder implements IQueryBuilder {
 	/**
 	 * Returns the table name quoted and with database prefix as needed by the implementation
 	 *
-	 * @param string $table
+	 * @param string|IQueryFunction $table
 	 * @return string
 	 */
 	public function getTableName($table) {

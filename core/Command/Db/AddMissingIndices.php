@@ -316,10 +316,36 @@ class AddMissingIndices extends Command {
 		$output->writeln('<info>Check indices of the oc_properties table.</info>');
 		if ($schema->hasTable('properties')) {
 			$table = $schema->getTable('properties');
+			$propertiesUpdated = false;
+
 			if (!$table->hasIndex('properties_path_index')) {
 				$output->writeln('<info>Adding properties_path_index index to the oc_properties table, this can take some time...</info>');
 
 				$table->addIndex(['userid', 'propertypath'], 'properties_path_index');
+				$this->connection->migrateToSchema($schema->getWrappedSchema());
+				$propertiesUpdated = true;
+			}
+			if (!$table->hasIndex('properties_pathonly_index')) {
+				$output->writeln('<info>Adding properties_pathonly_index index to the oc_properties table, this can take some time...</info>');
+
+				$table->addIndex(['propertypath'], 'properties_pathonly_index');
+				$this->connection->migrateToSchema($schema->getWrappedSchema());
+				$propertiesUpdated = true;
+			}
+
+			if ($propertiesUpdated) {
+				$updated = true;
+				$output->writeln('<info>oc_properties table updated successfully.</info>');
+			}
+		}
+
+		$output->writeln('<info>Check indices of the oc_jobs table.</info>');
+		if ($schema->hasTable('jobs')) {
+			$table = $schema->getTable('jobs');
+			if (!$table->hasIndex('job_lastcheck_reserved')) {
+				$output->writeln('<info>Adding job_lastcheck_reserved index to the oc_jobs table, this can take some time...</info>');
+
+				$table->addIndex(['last_checked', 'reserved_at'], 'job_lastcheck_reserved');
 				$this->connection->migrateToSchema($schema->getWrappedSchema());
 				$updated = true;
 				$output->writeln('<info>oc_properties table updated successfully.</info>');

@@ -694,7 +694,16 @@ class Encryption extends Wrapper {
 			'encrypted' => $isEncrypted,
 		];
 		if ($isEncrypted) {
-			$encryptedVersion = $sourceStorage->getCache()->get($sourceInternalPath)['encryptedVersion'];
+			$sourceCacheEntry = $sourceStorage->getCache()->get($sourceInternalPath);
+			$targetCacheEntry = $this->getCache()->get($targetInternalPath);
+
+			// Rename of the cache already happened, so we do the cleanup on the target
+			if ($sourceCacheEntry === false && $targetCacheEntry !== false) {
+				$encryptedVersion = $targetCacheEntry['encryptedVersion'];
+				$isRename = false;
+			} else {
+				$encryptedVersion = $sourceCacheEntry['encryptedVersion'];
+			}
 
 			// In case of a move operation from an unencrypted to an encrypted
 			// storage the old encrypted version would stay with "0" while the
@@ -768,7 +777,11 @@ class Encryption extends Wrapper {
 
 		if ($sourceStorage->is_dir($sourceInternalPath)) {
 			$dh = $sourceStorage->opendir($sourceInternalPath);
-			$result = $this->mkdir($targetInternalPath);
+			if (!$this->is_dir($targetInternalPath)) {
+				$result = $this->mkdir($targetInternalPath);
+			} else {
+				$result = true;
+			}
 			if (is_resource($dh)) {
 				while ($result and ($file = readdir($dh)) !== false) {
 					if (!Filesystem::isIgnoredDir($file)) {
@@ -784,8 +797,12 @@ class Encryption extends Wrapper {
 				fclose($source);
 				fclose($target);
 			} catch (\Exception $e) {
-				fclose($source);
-				fclose($target);
+				if (is_resource($source)) {
+					fclose($source);
+				}
+				if (is_resource($target)) {
+					fclose($target);
+				}
 				throw $e;
 			}
 			if ($result) {

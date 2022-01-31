@@ -32,7 +32,6 @@ namespace OC\Files\ObjectStore;
 
 use Aws\ClientResolver;
 use Aws\Credentials\CredentialProvider;
-use Aws\Credentials\EcsCredentialProvider;
 use Aws\Credentials\Credentials;
 use Aws\Exception\CredentialsException;
 use Aws\S3\Exception\S3Exception;
@@ -63,6 +62,9 @@ trait S3ConnectionTrait {
 	/** @var int */
 	protected $uploadPartSize;
 
+	/** @var int */
+	private $putSizeLimit;
+
 	protected $test;
 
 	protected function parseParams($params) {
@@ -77,6 +79,7 @@ trait S3ConnectionTrait {
 		$this->proxy = $params['proxy'] ?? false;
 		$this->timeout = $params['timeout'] ?? 15;
 		$this->uploadPartSize = $params['uploadPartSize'] ?? 524288000;
+		$this->putSizeLimit = $params['putSizeLimit'] ?? 104857600;
 		$params['region'] = empty($params['region']) ? 'eu-west-1' : $params['region'];
 		$params['hostname'] = empty($params['hostname']) ? 's3.' . $params['region'] . '.amazonaws.com' : $params['hostname'];
 		if (!isset($params['port']) || $params['port'] === '') {
@@ -109,15 +112,11 @@ trait S3ConnectionTrait {
 		$base_url = $scheme . '://' . $this->params['hostname'] . ':' . $this->params['port'] . '/';
 
 		// Adding explicit credential provider to the beginning chain.
-		// Including environment variables and IAM instance profiles.
+		// Including default credential provider (skipping AWS shared config files).
 		$provider = CredentialProvider::memoize(
 			CredentialProvider::chain(
 				$this->paramCredentialProvider(),
-				CredentialProvider::env(),
-				CredentialProvider::assumeRoleWithWebIdentityCredentialProvider(),
-				!empty(getenv(EcsCredentialProvider::ENV_URI))
-					? CredentialProvider::ecsCredentials()
-					: CredentialProvider::instanceProfile()
+				CredentialProvider::defaultProvider(['use_aws_shared_config_files' => false])
 			)
 		);
 

@@ -72,4 +72,23 @@ class OCIFunctionBuilder extends FunctionBuilder {
 
 		return parent::least($x, $y);
 	}
+
+	public function concat($x, ...$expr): IQueryFunction {
+		$args = func_get_args();
+		$list = [];
+		foreach ($args as $item) {
+			$list[] = $this->helper->quoteColumnName($item);
+		}
+		return new QueryFunction(sprintf('(%s)', implode(' || ', $list)));
+	}
+
+	public function groupConcat($expr, ?string $separator = ','): IQueryFunction {
+		$orderByClause = ' WITHIN GROUP(ORDER BY NULL)';
+		if (is_null($separator)) {
+			return new QueryFunction('LISTAGG(' . $this->helper->quoteColumnName($expr) . ')' . $orderByClause);
+		}
+
+		$separator = $this->connection->quote($separator);
+		return new QueryFunction('LISTAGG(' . $this->helper->quoteColumnName($expr) . ', ' . $separator . ')' . $orderByClause);
+	}
 }

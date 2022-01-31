@@ -48,7 +48,7 @@
 				:open.sync="actionOpen">
 				<ActionCheckbox v-if="token.type === 1"
 					:checked="token.scope.filesystem"
-					@change.stop.prevent="$emit('toggleScope', token, 'filesystem', !token.scope.filesystem)">
+					@change.stop.prevent="$emit('toggle-scope', token, 'filesystem', !token.scope.filesystem)">
 					<!-- TODO: add text/longtext with some description -->
 					{{ t('settings', 'Allow filesystem access') }}
 				</ActionCheckbox>
@@ -76,7 +76,7 @@
 						icon="icon-delete"
 						:title="t('settings', 'Revoke')"
 						@click.stop.prevent="revoke">
-						{{ t('settings', 'Revoking this token might prevent the wiping of your device if it hasn\'t started the wipe yet.') }}
+						{{ t('settings', 'Revoking this token might prevent the wiping of your device if it has not started the wipe yet.') }}
 					</ActionButton>
 				</template>
 			</Actions>

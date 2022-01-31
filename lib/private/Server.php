@@ -522,11 +522,11 @@ class Server extends ServerContainer implements IServerContainer {
 			$session = new \OC\Session\Memory('');
 			$timeFactory = new TimeFactory();
 			// Token providers might require a working database. This code
-			// might however be called when ownCloud is not yet setup.
+			// might however be called when Nextcloud is not yet setup.
 			if (\OC::$server->get(SystemConfig::class)->getValue('installed', false)) {
-				$defaultTokenProvider = $c->get(IProvider::class);
+				$provider = $c->get(IProvider::class);
 			} else {
-				$defaultTokenProvider = null;
+				$provider = null;
 			}
 
 			$legacyDispatcher = $c->get(SymfonyAdapter::class);
@@ -535,7 +535,7 @@ class Server extends ServerContainer implements IServerContainer {
 				$manager,
 				$session,
 				$timeFactory,
-				$defaultTokenProvider,
+				$provider,
 				$c->get(\OCP\IConfig::class),
 				$c->get(ISecureRandom::class),
 				$c->getLockdownManager(),
@@ -688,7 +688,16 @@ class Server extends ServerContainer implements IServerContainer {
 			$config = $c->get(\OCP\IConfig::class);
 
 			if ($config->getSystemValue('installed', false) && !(defined('PHPUNIT_RUN') && PHPUNIT_RUN)) {
-				$v = \OC_App::getAppVersions();
+				if (!$config->getSystemValueBool('log_query')) {
+					$v = \OC_App::getAppVersions();
+				} else {
+					// If the log_query is enabled, we can not get the app versions
+					// as that does a query, which will be logged and the logging
+					// depends on redis and here we are back again in the same function.
+					$v = [
+						'log_query' => 'enabled',
+					];
+				}
 				$v['core'] = implode(',', \OC_Util::getVersion());
 				$version = implode(',', $v);
 				$instanceId = \OC_Util::getInstanceId();
@@ -697,7 +706,8 @@ class Server extends ServerContainer implements IServerContainer {
 				return new \OC\Memcache\Factory($prefix, $c->get(ILogger::class),
 					$config->getSystemValue('memcache.local', null),
 					$config->getSystemValue('memcache.distributed', null),
-					$config->getSystemValue('memcache.locking', null)
+					$config->getSystemValue('memcache.locking', null),
+					$config->getSystemValueString('redis_log_file')
 				);
 			}
 			return $arrayCacheFactory;

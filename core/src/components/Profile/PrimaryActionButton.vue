@@ -21,15 +21,13 @@
 -->
 
 <template>
-	<a
-		class="profile__primary-action-button"
+	<a class="profile__primary-action-button"
 		:class="{ 'disabled': disabled }"
 		:href="href"
 		:target="target"
 		rel="noopener noreferrer nofollow"
 		v-on="$listeners">
-		<img
-			class="icon"
+		<img class="icon"
 			:class="[icon, { 'icon-invert': colorPrimaryText === '#ffffff' }]"
 			:src="icon">
 		<slot />
@@ -96,7 +94,9 @@ export default {
 			}
 		}
 
-		&:hover {
+		&:hover,
+		&:focus,
+		&:active {
 			background-color: var(--color-primary-element-light);
 		}
 	}

@@ -1182,7 +1182,7 @@ class View {
 				if ($result && in_array('delete', $hooks) and $result) {
 					$this->removeUpdate($storage, $internalPath);
 				}
-				if ($result && in_array('write', $hooks,  true) && $operation !== 'fopen' && $operation !== 'touch') {
+				if ($result && in_array('write', $hooks, true) && $operation !== 'fopen' && $operation !== 'touch') {
 					$this->writeUpdate($storage, $internalPath);
 				}
 				if ($result && in_array('touch', $hooks)) {
@@ -1340,7 +1340,7 @@ class View {
 
 		try {
 			// if the file is not in the cache or needs to be updated, trigger the scanner and reload the data
-			if (!$data || $data['size'] === -1) {
+			if (!$data || (isset($data['size']) && $data['size'] === -1)) {
 				if (!$storage->file_exists($internalPath)) {
 					return false;
 				}
@@ -1407,7 +1407,7 @@ class View {
 			}
 			$info = new FileInfo($path, $storage, $internalPath, $data, $mount, $owner);
 
-			if ($data and isset($data['fileid'])) {
+			if (isset($data['fileid'])) {
 				if ($includeMountPoints and $data['mimetype'] === 'httpd/unix-directory') {
 					//add the sizes of other mount points to the folder
 					$extOnly = ($includeMountPoints === 'ext');

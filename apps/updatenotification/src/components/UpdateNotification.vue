@@ -198,8 +198,8 @@ export default {
 			}
 
 			return this.missingAppUpdates.length === 0
-				? t('updatenotification', '<strong>All</strong> apps have a compatible version for this Nextcloud version available', this)
-				: n('updatenotification', '<strong>%n</strong> app has no compatible version for this Nextcloud version available', '<strong>%n</strong> apps have no compatible version for this Nextcloud version available', this.missingAppUpdates.length)
+				? t('updatenotification', '<strong>All</strong> apps have a compatible version for this Nextcloud version available.', this)
+				: n('updatenotification', '<strong>%n</strong> app has no compatible version for this Nextcloud version available.', '<strong>%n</strong> apps have no compatible version for this Nextcloud version available.', this.missingAppUpdates.length)
 		},
 
 		whatsNew() {
@@ -372,8 +372,8 @@ export default {
 
 	methods: {
 		/**
-			 * Creates a new authentication token and loads the updater URL
-			 */
+		 * Creates a new authentication token and loads the updater URL
+		 */
 		clickUpdaterButton() {
 			$.ajax({
 				url: generateUrl('/apps/updatenotification/credentials'),

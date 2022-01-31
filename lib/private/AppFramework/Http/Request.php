@@ -199,6 +199,7 @@ class Request implements \ArrayAccess, \Countable, IRequest {
 	 * @param string $offset
 	 * @return mixed
 	 */
+	#[\ReturnTypeWillChange]
 	public function offsetGet($offset) {
 		return isset($this->items['parameters'][$offset])
 			? $this->items['parameters'][$offset]
@@ -210,7 +211,7 @@ class Request implements \ArrayAccess, \Countable, IRequest {
 	 * @param string $offset
 	 * @param mixed $value
 	 */
-	public function offsetSet($offset, $value) {
+	public function offsetSet($offset, $value): void {
 		throw new \RuntimeException('You cannot change the contents of the request object');
 	}
 
@@ -218,7 +219,7 @@ class Request implements \ArrayAccess, \Countable, IRequest {
 	 * @see offsetExists
 	 * @param string $offset
 	 */
-	public function offsetUnset($offset) {
+	public function offsetUnset($offset): void {
 		throw new \RuntimeException('You cannot change the contents of the request object');
 	}
 
@@ -302,7 +303,7 @@ class Request implements \ArrayAccess, \Countable, IRequest {
 	 * @return string
 	 */
 	public function getHeader(string $name): string {
-		$name = strtoupper(str_replace('-', '_',$name));
+		$name = strtoupper(str_replace('-', '_', $name));
 		if (isset($this->server['HTTP_' . $name])) {
 			return $this->server['HTTP_' . $name];
 		}

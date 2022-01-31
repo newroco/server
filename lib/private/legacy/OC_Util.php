@@ -580,6 +580,8 @@ class OC_Util {
 	/**
 	 * add a javascript file
 	 *
+	 * @deprecated 24.0.0 - Use \OCP\Util::addScript
+	 *
 	 * @param string $application application id
 	 * @param string|null $file filename
 	 * @param bool $prepend prepend the Script to the beginning of the list
@@ -610,6 +612,8 @@ class OC_Util {
 
 	/**
 	 * add a translation JS file
+	 *
+	 * @deprecated 24.0.0
 	 *
 	 * @param string $application application id
 	 * @param string|null $languageCode language code, defaults to the current language
@@ -751,8 +755,8 @@ class OC_Util {
 		if (!OC_Helper::isReadOnlyConfigEnabled()) {
 			if (!is_writable(OC::$configDir) or !is_readable(OC::$configDir)) {
 				$errors[] = [
-					'error' => $l->t('Cannot write into "config" directory'),
-					'hint' => $l->t('This can usually be fixed by giving the webserver write access to the config directory. See %s',
+					'error' => $l->t('Cannot write into "config" directory.'),
+					'hint' => $l->t('This can usually be fixed by giving the web server write access to the config directory. See %s',
 						[ $urlGenerator->linkToDocs('admin-dir_permissions') ]) . '. '
 						. $l->t('Or, if you prefer to keep config.php file read only, set the option "config_is_read_only" to true in it. See %s',
 						[ $urlGenerator->linkToDocs('admin-config') ])
@@ -767,8 +771,8 @@ class OC_Util {
 				|| !is_readable(OC_App::getInstallPath())
 			) {
 				$errors[] = [
-					'error' => $l->t('Cannot write into "apps" directory'),
-					'hint' => $l->t('This can usually be fixed by giving the webserver write access to the apps directory'
+					'error' => $l->t('Cannot write into "apps" directory.'),
+					'hint' => $l->t('This can usually be fixed by giving the web server write access to the apps directory'
 						. ' or disabling the App Store in the config file.')
 				];
 			}
@@ -781,8 +785,8 @@ class OC_Util {
 					$errors = array_merge($errors, self::checkDataDirectoryPermissions($CONFIG_DATADIRECTORY));
 				} else {
 					$errors[] = [
-						'error' => $l->t('Cannot create "data" directory'),
-						'hint' => $l->t('This can usually be fixed by giving the webserver write access to the root directory. See %s',
+						'error' => $l->t('Cannot create "data" directory.'),
+						'hint' => $l->t('This can usually be fixed by giving the web server write access to the root directory. See %s',
 							[$urlGenerator->linkToDocs('admin-dir_permissions')])
 					];
 				}
@@ -791,10 +795,10 @@ class OC_Util {
 				$testFile = sprintf('%s/%s.tmp', $CONFIG_DATADIRECTORY, uniqid('data_dir_writability_test_'));
 				$handle = fopen($testFile, 'w');
 				if (!$handle || fwrite($handle, 'Test write operation') === false) {
-					$permissionsHint = $l->t('Permissions can usually be fixed by giving the webserver write access to the root directory. See %s.',
+					$permissionsHint = $l->t('Permissions can usually be fixed by giving the web server write access to the root directory. See %s.',
 						[$urlGenerator->linkToDocs('admin-dir_permissions')]);
 					$errors[] = [
-						'error' => 'Your data directory is not writable',
+						'error' => $l->t('Your data directory is not writable.'),
 						'hint' => $permissionsHint
 					];
 				} else {
@@ -808,10 +812,10 @@ class OC_Util {
 
 		if (!OC_Util::isSetLocaleWorking()) {
 			$errors[] = [
-				'error' => $l->t('Setting locale to %s failed',
+				'error' => $l->t('Setting locale to %s failed.',
 					['en_US.UTF-8/fr_FR.UTF-8/es_ES.UTF-8/de_DE.UTF-8/ru_RU.UTF-8/'
 						. 'pt_BR.UTF-8/it_IT.UTF-8/ja_JP.UTF-8/zh_CN.UTF-8']),
-				'hint' => $l->t('Please install one of these locales on your system and restart your webserver.')
+				'hint' => $l->t('Please install one of these locales on your system and restart your web server.')
 			];
 		}
 
@@ -837,7 +841,6 @@ class OC_Util {
 				'json_encode' => 'JSON',
 				'gd_info' => 'GD',
 				'gzencode' => 'zlib',
-				'iconv' => 'iconv',
 				'simplexml_load_string' => 'SimpleXML',
 				'hash' => 'HASH Message Digest Framework',
 				'curl_init' => 'cURL',
@@ -916,8 +919,8 @@ class OC_Util {
 		if ($iniWrapper->getBool('mbstring.func_overload') !== null &&
 			$iniWrapper->getBool('mbstring.func_overload') === true) {
 			$errors[] = [
-				'error' => $l->t('mbstring.func_overload is set to "%s" instead of the expected value "0"', [$iniWrapper->getString('mbstring.func_overload')]),
-				'hint' => $l->t('To fix this issue set <code>mbstring.func_overload</code> to <code>0</code> in your php.ini')
+				'error' => $l->t('<code>mbstring.func_overload</code> is set to <code>%s</code> instead of the expected value <code>0</code>.', [$iniWrapper->getString('mbstring.func_overload')]),
+				'hint' => $l->t('To fix this issue set <code>mbstring.func_overload</code> to <code>0</code> in your php.ini.')
 			];
 		}
 
@@ -976,8 +979,8 @@ class OC_Util {
 					$version = $data['server_version'];
 					if (version_compare($version, '9.0.0', '<')) {
 						$errors[] = [
-							'error' => $l->t('PostgreSQL >= 9 required'),
-							'hint' => $l->t('Please upgrade your database version')
+							'error' => $l->t('PostgreSQL >= 9 required.'),
+							'hint' => $l->t('Please upgrade your database version.')
 						];
 					}
 				}
@@ -1009,7 +1012,7 @@ class OC_Util {
 			if ($perms[2] !== '0') {
 				$l = \OC::$server->getL10N('lib');
 				return [[
-					'error' => $l->t('Your data directory is readable by other users'),
+					'error' => $l->t('Your data directory is readable by other users.'),
 					'hint' => $l->t('Please change the permissions to 0770 so that the directory cannot be listed by other users.'),
 				]];
 			}
@@ -1029,13 +1032,13 @@ class OC_Util {
 		$errors = [];
 		if ($dataDirectory[0] !== '/') {
 			$errors[] = [
-				'error' => $l->t('Your data directory must be an absolute path'),
-				'hint' => $l->t('Check the value of "datadirectory" in your configuration')
+				'error' => $l->t('Your data directory must be an absolute path.'),
+				'hint' => $l->t('Check the value of "datadirectory" in your configuration.')
 			];
 		}
 		if (!file_exists($dataDirectory . '/.ocdata')) {
 			$errors[] = [
-				'error' => $l->t('Your data directory is invalid'),
+				'error' => $l->t('Your data directory is invalid.'),
 				'hint' => $l->t('Ensure there is a file called ".ocdata"' .
 					' in the root of the data directory.')
 			];
@@ -1127,11 +1130,12 @@ class OC_Util {
 	 * This function is used to sanitize HTML and should be applied on any
 	 * string or array of strings before displaying it on a web page.
 	 *
-	 * @param string|array $value
-	 * @return string|array an array of sanitized strings or a single sanitized string, depends on the input parameter.
+	 * @param string|string[] $value
+	 * @return string|string[] an array of sanitized strings or a single sanitized string, depends on the input parameter.
 	 */
 	public static function sanitizeHTML($value) {
 		if (is_array($value)) {
+			/** @var string[] $value */
 			$value = array_map(function ($value) {
 				return self::sanitizeHTML($value);
 			}, $value);
@@ -1179,7 +1183,7 @@ class OC_Util {
 		$fp = @fopen($testFile, 'w');
 		if (!$fp) {
 			throw new \OCP\HintException('Can\'t create test file to check for working .htaccess file.',
-				'Make sure it is possible for the webserver to write to ' . $testFile);
+				'Make sure it is possible for the web server to write to ' . $testFile);
 		}
 		fwrite($fp, $testContent);
 		fclose($fp);
@@ -1239,22 +1243,38 @@ class OC_Util {
 	}
 
 	/**
-	 * Check if the setlocal call does not work. This can happen if the right
+	 * Check if current locale is non-UTF8
+	 *
+	 * @return bool
+	 */
+	private static function isNonUTF8Locale() {
+		if (function_exists('escapeshellcmd')) {
+			return '' === escapeshellcmd('§');
+		} elseif (function_exists('escapeshellarg')) {
+			return '\'\'' === escapeshellarg('§');
+		} else {
+			return 0 === preg_match('/utf-?8/i', setlocale(LC_CTYPE, 0));
+		}
+	}
+
+	/**
+	 * Check if the setlocale call does not work. This can happen if the right
 	 * local packages are not available on the server.
 	 *
 	 * @return bool
 	 */
 	public static function isSetLocaleWorking() {
-		if ('' === basename('§')) {
+		if (self::isNonUTF8Locale()) {
 			// Borrowed from \Patchwork\Utf8\Bootup::initLocale
 			setlocale(LC_ALL, 'C.UTF-8', 'C');
 			setlocale(LC_CTYPE, 'en_US.UTF-8', 'fr_FR.UTF-8', 'es_ES.UTF-8', 'de_DE.UTF-8', 'ru_RU.UTF-8', 'pt_BR.UTF-8', 'it_IT.UTF-8', 'ja_JP.UTF-8', 'zh_CN.UTF-8', '0');
+
+			// Check again
+			if (self::isNonUTF8Locale()) {
+				return false;
+			}
 		}
 
-		// Check again
-		if ('' === basename('§')) {
-			return false;
-		}
 		return true;
 	}
 
@@ -1427,18 +1447,5 @@ class OC_Util {
 		} else {
 			return false;
 		}
-	}
-
-	/**
-	 * is this Internet explorer ?
-	 *
-	 * @return boolean
-	 */
-	public static function isIe() {
-		if (!isset($_SERVER['HTTP_USER_AGENT'])) {
-			return false;
-		}
-
-		return preg_match(Request::USER_AGENT_IE, $_SERVER['HTTP_USER_AGENT']) === 1;
 	}
 }

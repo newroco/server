@@ -30,8 +30,7 @@
 				@keyup.enter="showNewUserMenu"
 				@keyup.space="showNewUserMenu" />
 			<template #list>
-				<AppNavigationItem
-					id="addgroup"
+				<AppNavigationItem id="addgroup"
 					ref="addGroup"
 					:edit-placeholder="t('settings', 'Enter group name')"
 					:editable="true"
@@ -40,8 +39,7 @@
 					icon="icon-add"
 					@click="showAddGroupForm"
 					@update:title="createGroup" />
-				<AppNavigationItem
-					id="everyone"
+				<AppNavigationItem id="everyone"
 					:exact="true"
 					:title="t('settings', 'Active users')"
 					:to="{ name: 'users' }"
@@ -50,8 +48,7 @@
 						{{ userCount }}
 					</AppNavigationCounter>
 				</AppNavigationItem>
-				<AppNavigationItem
-					v-if="settings.isAdmin"
+				<AppNavigationItem v-if="settings.isAdmin"
 					id="admin"
 					:exact="true"
 					:title="t('settings', 'Admins')"
@@ -63,8 +60,7 @@
 				</AppNavigationItem>
 
 				<!-- Hide the disabled if none, if we don't have the data (-1) show it -->
-				<AppNavigationItem
-					v-if="disabledGroupMenu.usercount > 0 || disabledGroupMenu.usercount === -1"
+				<AppNavigationItem v-if="disabledGroupMenu.usercount > 0 || disabledGroupMenu.usercount === -1"
 					id="disabled"
 					:exact="true"
 					:title="t('settings', 'Disabled users')"
@@ -76,8 +72,7 @@
 				</AppNavigationItem>
 
 				<AppNavigationCaption v-if="groupList.length > 0" :title="t('settings', 'Groups')" />
-				<AppNavigationItem
-					v-for="group in groupList"
+				<AppNavigationItem v-for="group in groupList"
 					:key="group.id"
 					:exact="true"
 					:title="group.title"
@@ -87,8 +82,7 @@
 						{{ group.count }}
 					</AppNavigationCounter>
 					<template slot="actions">
-						<ActionButton
-							v-if="group.id !== 'admin' && group.id !== 'disabled' && settings.isAdmin"
+						<ActionButton v-if="group.id !== 'admin' && group.id !== 'disabled' && settings.isAdmin"
 							icon="icon-delete"
 							@click="removeGroup(group.id)">
 							{{ t('settings', 'Remove group') }}
@@ -151,8 +145,7 @@
 			</template>
 		</AppNavigation>
 		<AppContent>
-			<UserList
-				:users="users"
+			<UserList :users="users"
 				:show-config="showConfig"
 				:selected-group="selectedGroupDecoded"
 				:external-actions="externalActions" />
@@ -390,7 +383,7 @@ export default {
 		/**
 		 * Dispatch default quota set request
 		 *
-		 * @param {string|Object} quota Quota in readable format '5 GB' or Object {id: '5 GB', label: '5GB'}
+		 * @param {string | object} quota Quota in readable format '5 GB' or Object {id: '5 GB', label: '5GB'}
 		 */
 		setDefaultQuota(quota = 'none') {
 			this.$store.dispatch('setAppConfig', {
@@ -410,7 +403,7 @@ export default {
 		 * Validate quota string to make sure it's a valid human file size
 		 *
 		 * @param {string} quota Quota in readable format '5 GB'
-		 * @returns {Promise|boolean}
+		 * @return {Promise|boolean}
 		 */
 		validateQuota(quota) {
 			// only used for new presets sent through @Tag
@@ -429,7 +422,7 @@ export default {
 		 * @param {string} icon the icon class
 		 * @param {string} text the text to display
 		 * @param {Function} action the function to run
-		 * @returns {Array}
+		 * @return {Array}
 		 */
 		registerAction(icon, text, action) {
 			this.externalActions.push({
@@ -484,8 +477,9 @@ export default {
 
 		/**
 		 * Format a group to a menu entry
-		 * @param {Object} group the group
-		 * @returns {Object}
+		 *
+		 * @param {object} group the group
+		 * @return {object}
 		 */
 		formatGroupMenu(group) {
 			const item = {}
