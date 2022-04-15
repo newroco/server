@@ -58,10 +58,8 @@ use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\NotFoundException;
 use OCP\Files\NotPermittedException;
-use OCP\Files\Storage\IStorage;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
-use Psr\Log\LoggerInterface;
 
 class Trashbin {
 
@@ -133,15 +131,14 @@ class Trashbin {
 		$query = \OC::$server->getDatabaseConnection()->getQueryBuilder();
 		$query->select('id', 'timestamp', 'location')
 			->from('files_trash')
-			->where($query->expr()->eq('user', $query->createNamedParameter($user)))
-			->andWhere($query->expr()->eq('location', $query->createNamedParameter('.')));
+			->where($query->expr()->eq('user', $query->createNamedParameter($user)));
 		$result = $query->executeQuery();
 		$array = [];
 		while ($row = $result->fetch()) {
 			if (isset($array[$row['id']])) {
-				$array[$row['id']][$row['timestamp']] = $row;
+				$array[$row['id']][$row['timestamp']] = $row['location'];
 			} else {
-				$array[$row['id']] = [$row['timestamp'] => $row];
+				$array[$row['id']] = [$row['timestamp'] => $row['location']];
 			}
 		}
 		$result->closeCursor();
@@ -229,7 +226,7 @@ class Trashbin {
 				->setValue('user', $query->createNamedParameter($user));
 			$result = $query->executeStatement();
 			if (!$result) {
-				\OC::$server->get(LoggerInterface::class)->error('trash bin database couldn\'t be updated for the files owner', ['app' => 'files_trashbin']);
+				\OC::$server->getLogger()->error('trash bin database couldn\'t be updated for the files owner', ['app' => 'files_trashbin']);
 			}
 		}
 	}
@@ -270,286 +267,104 @@ class Trashbin {
 
 		$filename = $path_parts['basename'];
 		$location = $path_parts['dirname'];
-
 		/** @var ITimeFactory $timeFactory */
 		$timeFactory = \OC::$server->query(ITimeFactory::class);
 		$timestamp = $timeFactory->getTime();
 
 		$lockingProvider = \OC::$server->getLockingProvider();
 
+		// disable proxy to prevent recursive calls
+		$trashPath = '/files_trashbin/files/' . $filename . '.d' . $timestamp;
+		$gotLock = false;
+
+		while (!$gotLock) {
+			try {
+				/** @var \OC\Files\Storage\Storage $trashStorage */
+				[$trashStorage, $trashInternalPath] = $ownerView->resolvePath($trashPath);
+
+				$trashStorage->acquireLock($trashInternalPath, ILockingProvider::LOCK_EXCLUSIVE, $lockingProvider);
+				$gotLock = true;
+			} catch (LockedException $e) {
+				// a file with the same name is being deleted concurrently
+				// nudge the timestamp a bit to resolve the conflict
+
+				$timestamp = $timestamp + 1;
+
+				$trashPath = '/files_trashbin/files/' . $filename . '.d' . $timestamp;
+			}
+		}
+
 		/** @var \OC\Files\Storage\Storage $sourceStorage */
 		[$sourceStorage, $sourceInternalPath] = $ownerView->resolvePath('/files/' . $ownerPath);
 
-		$moveRootDirectoryToTrash = false;
-		$transferRootDirectoryToExistingTrashDirectory = null;
-
-		// A directory in the root, must check if a directory with the exact
-		// name already exists in the trash, if it does then move all files from
-		// the source directory to the existing trash directory and then delete
-		// the source directory, else move it to the trash.
-		if ($location === '.' && ! $sourceStorage->is_file($sourceInternalPath)) {
-			$query = \OC::$server->getDatabaseConnection()->getQueryBuilder();
-
-			$query->select('*')
-				->from('files_trash')
-				->where($query->expr()->eq('id', $query->createNamedParameter($filename)))
-				->andWhere($query->expr()->eq('location', $query->createNamedParameter('.')))
-				->andWhere($query->expr()->eq('user', $query->createNamedParameter($owner)));
-
-			$result = $query->executeQuery();
-			$records = $result->fetchAll();
-			$result->closeCursor();
-
-			$moveRootDirectoryToTrash = count($records) === 0;
-
-			if (count($records) > 0) {
-				$transferRootDirectoryToExistingTrashDirectory = $records[0];
-			}
+		if ($trashStorage->file_exists($trashInternalPath)) {
+			$trashStorage->unlink($trashInternalPath);
 		}
 
-		if ($location === '.' && ($sourceStorage->is_file($sourceInternalPath) || $moveRootDirectoryToTrash)) {
-			// disable proxy to prevent recursive calls
-			$trashPath = '/files_trashbin/files/' . $filename . '.d' . $timestamp;
-			$gotLock = false;
+		$config = \OC::$server->getConfig();
+		$systemTrashbinSize = (int)$config->getAppValue('files_trashbin', 'trashbin_size', '-1');
+		$userTrashbinSize = (int)$config->getUserValue($owner, 'files_trashbin', 'trashbin_size', '-1');
+		$configuredTrashbinSize = ($userTrashbinSize < 0) ? $systemTrashbinSize : $userTrashbinSize;
+		if ($configuredTrashbinSize >= 0 && $sourceStorage->filesize($sourceInternalPath) >= $configuredTrashbinSize) {
+			return false;
+		}
 
-			while (!$gotLock) {
-				try {
-					/** @var \OC\Files\Storage\Storage $trashStorage */
-					[$trashStorage, $trashInternalPath] = $ownerView->resolvePath($trashPath);
+		$trashStorage->getUpdater()->renameFromStorage($sourceStorage, $sourceInternalPath, $trashInternalPath);
 
-					$trashStorage->acquireLock($trashInternalPath, ILockingProvider::LOCK_EXCLUSIVE, $lockingProvider);
-					$gotLock = true;
-				} catch (LockedException $e) {
-					// a file with the same name is being deleted concurrently
-					// nudge the timestamp a bit to resolve the conflict
+		try {
+			$moveSuccessful = true;
 
-					$timestamp = $timestamp + 1;
-
-					$trashPath = '/files_trashbin/files/' . $filename . '.d' . $timestamp;
-				}
+			// when moving within the same object store, the cache update done above is enough to move the file
+			if (!($trashStorage->instanceOfStorage(ObjectStoreStorage::class) && $trashStorage->getId() === $sourceStorage->getId())) {
+				$trashStorage->moveFromStorage($sourceStorage, $sourceInternalPath, $trashInternalPath);
 			}
-
+		} catch (\OCA\Files_Trashbin\Exceptions\CopyRecursiveException $e) {
+			$moveSuccessful = false;
 			if ($trashStorage->file_exists($trashInternalPath)) {
 				$trashStorage->unlink($trashInternalPath);
 			}
-
-			$config = \OC::$server->getConfig();
-			$systemTrashbinSize = (int)$config->getAppValue('files_trashbin', 'trashbin_size', '-1');
-			$userTrashbinSize = (int)$config->getUserValue($owner, 'files_trashbin', 'trashbin_size', '-1');
-			$configuredTrashbinSize = ($userTrashbinSize < 0) ? $systemTrashbinSize : $userTrashbinSize;
-			if ($configuredTrashbinSize >= 0 && $sourceStorage->filesize($sourceInternalPath) >= $configuredTrashbinSize) {
-				return false;
-			}
-
-			$trashStorage->getUpdater()->renameFromStorage($sourceStorage, $sourceInternalPath, $trashInternalPath);
-
-			try {
-				$moveSuccessful = true;
-
-				// when moving within the same object store, the cache update done above is enough to move the file
-				if (!($trashStorage->instanceOfStorage(ObjectStoreStorage::class) && $trashStorage->getId() === $sourceStorage->getId())) {
-					$trashStorage->moveFromStorage($sourceStorage, $sourceInternalPath, $trashInternalPath);
-				}
-			} catch (\OCA\Files_Trashbin\Exceptions\CopyRecursiveException $e) {
-				$moveSuccessful = false;
-				if ($trashStorage->file_exists($trashInternalPath)) {
-					$trashStorage->unlink($trashInternalPath);
-				}
 			\OC::$server->getLogger()->error('Couldn\'t move ' . $file_path . ' to the trash bin', ['app' => 'files_trashbin']);
-			}
+		}
 
-			if ($sourceStorage->file_exists($sourceInternalPath)) { // failed to delete the original file, abort
-				if ($sourceStorage->is_dir($sourceInternalPath)) {
-					$sourceStorage->rmdir($sourceInternalPath);
-				} else {
-					$sourceStorage->unlink($sourceInternalPath);
-				}
-
-				if ($sourceStorage->file_exists($sourceInternalPath)) {
-					// undo the cache move
-					$sourceStorage->getUpdater()->renameFromStorage($trashStorage, $trashInternalPath, $sourceInternalPath);
-				} else {
-					$trashStorage->getUpdater()->remove($trashInternalPath);
-				}
-				return false;
-			}
-
-			if ($moveSuccessful) {
-				$query = \OC::$server->getDatabaseConnection()->getQueryBuilder();
-				$query->insert('files_trash')
-					->setValue('id', $query->createNamedParameter($filename))
-					->setValue('timestamp', $query->createNamedParameter($timestamp))
-					->setValue('location', $query->createNamedParameter($location))
-					->setValue('user', $query->createNamedParameter($owner));
-				$result = $query->executeStatement();
-				if (!$result) {
-				\OC::$server->get(LoggerInterface::class)->error('trash bin database couldn\'t be updated', ['app' => 'files_trashbin']);
-				}
-				\OCP\Util::emitHook('\OCA\Files_Trashbin\Trashbin', 'post_moveToTrash', ['filePath' => Filesystem::normalizePath($file_path),
-					'trashPath' => Filesystem::normalizePath($filename . '.d' . $timestamp)]);
-
-				self::retainVersions($filename, $owner, $ownerPath, $timestamp);
-
-				// if owner !== user we need to also add a copy to the users trash
-				if ($user !== $owner && $ownerOnly === false) {
-					self::copyFilesToUser($ownerPath, $owner, $file_path, $user, $timestamp);
-				}
-			}
-
-			$trashStorage->releaseLock($trashInternalPath, ILockingProvider::LOCK_EXCLUSIVE, $lockingProvider);
-		} else {
-			if ($transferRootDirectoryToExistingTrashDirectory !== null) {
-				$trashPath = 'files_trashbin/files/' . $transferRootDirectoryToExistingTrashDirectory['id'] . '.d' . $transferRootDirectoryToExistingTrashDirectory['timestamp'];
+		if ($sourceStorage->file_exists($sourceInternalPath)) { // failed to delete the original file, abort
+			if ($sourceStorage->is_dir($sourceInternalPath)) {
+				$sourceStorage->rmdir($sourceInternalPath);
 			} else {
-				// Top parent must exist in the files_trash table.
-				// All sub parents must be created (if not already) under this top parent in the filecache table.
-				$parentDirectories = explode('/', $location);
-
-				// Create record in the trash file table for the top parent, if it
-				// does not already exist.
-				$topParent = $parentDirectories[0];
-
-				$query = \OC::$server->getDatabaseConnection()->getQueryBuilder();
-
-				$query->select('*')
-					->from('files_trash')
-					->where($query->expr()->eq('id', $query->createNamedParameter($topParent)))
-					->andWhere($query->expr()->eq('location', $query->createNamedParameter('.')))
-					->andWhere($query->expr()->eq('user', $query->createNamedParameter($owner)));
-
-				$result = $query->executeQuery();
-				$records = $result->fetchAll();
-				$result->closeCursor();
-
-				// Current parent directory does not exist, create it.
-				if (count($records) === 0) {
-					// Create directory in the owner's root trash.
-					$trashPath = '/files_trashbin/files/' . $topParent . '.d' . $timestamp;
-					$gotLock = false;
-
-					while (!$gotLock) {
-						try {
-							/** @var \OC\Files\Storage\Storage $trashStorage */
-							[$trashStorage, $trashInternalPath] = $ownerView->resolvePath($trashPath);
-
-							$trashStorage->acquireLock($trashInternalPath, ILockingProvider::LOCK_EXCLUSIVE, $lockingProvider);
-							$gotLock = true;
-						} catch (LockedException $e) {
-							// a file with the same name is being deleted concurrently
-							// nudge the timestamp a bit to resolve the conflict
-
-							$timestamp = $timestamp + 1;
-
-							$trashPath = '/files_trashbin/files/' . $topParent . '.d' . $timestamp;
-						}
-					}
-
-					if ($trashStorage->file_exists($trashInternalPath)) {
-						$trashStorage->unlink($trashInternalPath);
-					}
-
-					$trashStorage->releaseLock($trashInternalPath, ILockingProvider::LOCK_EXCLUSIVE, $lockingProvider);
-
-//					$config = \OC::$server->getConfig();
-//					$systemTrashbinSize = (int)$config->getAppValue('files_trashbin', 'trashbin_size', '-1');
-//					$userTrashbinSize = (int)$config->getUserValue($owner, 'files_trashbin', 'trashbin_size', '-1');
-//					$configuredTrashbinSize = ($userTrashbinSize < 0) ? $systemTrashbinSize : $userTrashbinSize;
-//					if ($configuredTrashbinSize >= 0 && $sourceStorage->filesize($sourceInternalPath) >= $configuredTrashbinSize) {
-//						return false;
-//					}
-
-					// Store in 'filecache' DB table.
-					$trashNormalizedPath = Filesystem::normalizePath($trashPath);
-
-					$trashCache = $trashStorage->getCache();
-					$trashCache->insert($trashNormalizedPath, [
-						'size' => 0,
-						'mtime' => $timestamp,
-						'mimetype' => 'httpd/unix-directory',
-						'permissions' => 31,
-					]);
-
-					// Create file system 'directory'.
-					$trashStorage->mkdir($trashNormalizedPath);
-
-					$query = \OC::$server->getDatabaseConnection()->getQueryBuilder();
-
-					$query->insert('files_trash')
-						->setValue('id', $query->createNamedParameter($topParent))
-						->setValue('timestamp', $query->createNamedParameter($timestamp))
-						->setValue('location', $query->createNamedParameter('.'))
-						->setValue('user', $query->createNamedParameter($owner));
-
-					$result = $query->executeStatement();
-
-					if (!$result) {
-						\OC::$server->getLogger()->error('trash bin database couldn\'t be updated', ['app' => 'files_trashbin']);
-					}
-
-					$topParentTrashFileName = substr($trashPath, 1);
-				} else {
-					$topParentTrashFileName = 'files_trashbin/files/' . $records[0]['id'] . '.d' . $records[0]['timestamp'];
-
-					[$trashStorage,] = $ownerView->resolvePath("/$topParentTrashFileName");
-				}
-
-				$fullParentsPath = $topParentTrashFileName;
-				$currentParentPath = $topParentTrashFileName;
-
-				// Create records in the trash files table for all parent
-				// directories in order to keep the directories structure.
-				foreach ($parentDirectories as $index => $parentDirectory) {
-					if ($index === 0) {
-						continue;
-					}
-
-					$fullParentsPath = "$fullParentsPath/$parentDirectory";
-
-					$currentParentPath = Filesystem::normalizePath("$currentParentPath/$parentDirectory");
-
-					// Parent directory exists, so we don't have to do anything.
-					if ($trashStorage->file_exists($currentParentPath)) {
-						continue;
-					}
-
-					$trashStorage->mkdir($currentParentPath);
-
-					// Store in 'filecache' DB table.
-					$trashCache = $trashStorage->getCache();
-					$trashCache->insert($currentParentPath, [
-						'size' => 0,
-						'mtime' => $timestamp,
-						'mimetype' => 'httpd/unix-directory',
-						'permissions' => 31,
-					]);
-				}
-
-				$trashPath = "$fullParentsPath/$filename";
+				$sourceStorage->unlink($sourceInternalPath);
 			}
 
-			[$trashStorage, $trashInternalPath] = $ownerView->resolvePath($trashPath);
-
-			/** @var \OC\Files\Storage\Storage $sourceStorage */
-			[$sourceStorage, $sourceInternalPath] = $ownerView->resolvePath('/files/' . $ownerPath);
-
-			[$moveSuccessful, $shouldStop] = $trashStorage->moveItemRecursively($sourceStorage, $sourceInternalPath, $trashInternalPath);
-
-			if ($shouldStop) {
-				return false;
+			if ($sourceStorage->file_exists($sourceInternalPath)) {
+				// undo the cache move
+				$sourceStorage->getUpdater()->renameFromStorage($trashStorage, $trashInternalPath, $sourceInternalPath);
+			} else {
+				$trashStorage->getUpdater()->remove($trashInternalPath);
 			}
+			return false;
+		}
 
-			if ($moveSuccessful) {
-				\OCP\Util::emitHook('\OCA\Files_Trashbin\Trashbin', 'post_moveToTrash', ['filePath' => Filesystem::normalizePath($file_path),
-					'trashPath' => Filesystem::normalizePath($trashPath)]);
+		if ($moveSuccessful) {
+			$query = \OC::$server->getDatabaseConnection()->getQueryBuilder();
+			$query->insert('files_trash')
+				->setValue('id', $query->createNamedParameter($filename))
+				->setValue('timestamp', $query->createNamedParameter($timestamp))
+				->setValue('location', $query->createNamedParameter($location))
+				->setValue('user', $query->createNamedParameter($owner));
+			$result = $query->executeStatement();
+			if (!$result) {
+				\OC::$server->getLogger()->error('trash bin database couldn\'t be updated', ['app' => 'files_trashbin']);
+			}
+			\OCP\Util::emitHook('\OCA\Files_Trashbin\Trashbin', 'post_moveToTrash', ['filePath' => Filesystem::normalizePath($file_path),
+				'trashPath' => Filesystem::normalizePath($filename . '.d' . $timestamp)]);
 
-				self::retainVersions($filename, $owner, $ownerPath, $timestamp);
+			self::retainVersions($filename, $owner, $ownerPath, $timestamp);
 
-				// if owner !== user we need to also add a copy to the users trash
-				if ($user !== $owner && $ownerOnly === false) {
-					self::copyFilesToUser($ownerPath, $owner, $file_path, $user, $timestamp);
-				}
+			// if owner !== user we need to also add a copy to the users trash
+			if ($user !== $owner && $ownerOnly === false) {
+				self::copyFilesToUser($ownerPath, $owner, $file_path, $user, $timestamp);
 			}
 		}
+
+		$trashStorage->releaseLock($trashInternalPath, ILockingProvider::LOCK_EXCLUSIVE, $lockingProvider);
 
 		self::scheduleExpire($user);
 
@@ -648,10 +463,11 @@ class Trashbin {
 		$user = OC_User::getUser();
 		$view = new View('/' . $user);
 
+		$location = '';
 		if ($timestamp) {
 			$location = self::getLocation($user, $filename, $timestamp);
 			if ($location === false) {
-				\OC::$server->get(LoggerInterface::class)->error('trash bin database inconsistent! ($user: ' . $user . ' $filename: ' . $filename . ', $timestamp: ' . $timestamp . ')', ['app' => 'files_trashbin']);
+				\OC::$server->getLogger()->error('trash bin database inconsistent! ($user: ' . $user . ' $filename: ' . $filename . ', $timestamp: ' . $timestamp . ')', ['app' => 'files_trashbin']);
 			} else {
 				// if location no longer exists, restore file in the root directory
 				if ($location !== '/' &&
@@ -663,163 +479,61 @@ class Trashbin {
 			}
 		} else {
 			// Item which resides in a directory in trash. Restore at original path.
-			$paths = explode('/', $file);
-
-			$filePath = '';
-
-			foreach ($paths as $path) {
-				if ( ! $path) {
-					continue;
+			$parentDirectories = explode('/', substr($file, 1), -1);
+			foreach($parentDirectories as $key => $parent) {
+				if(strpos($parent, '.d')) {
+					$parent = stristr($parent, '.d', true);
 				}
-
-				if ($path === $filename) {
-					break;
+				if($key === array_key_first($parentDirectories) && $view->is_dir('files/' . $parent)) {
+					$parent = self::getUniqueFolderName($parent);
 				}
-
-				$directoryData = explode('.d', $path);
-
-				$filePath = "$filePath/$directoryData[0]";
+				$location .= $parent . '/';
 			}
 
-			$location = $filePath;
+			if(!$view->is_dir('files/' . $location)) {
+				$view->mkdir('files/' . $location);
+			}
 		}
 
-		$sourcePath = 'files_trashbin/files/' . $file;
-		$source = Filesystem::normalizePath($sourcePath);
+		// we need a  extension in case a file/dir with the same name already exists
+		$uniqueFilename = self::getUniqueFilename($location, $filename, $view);
 
+		$source = Filesystem::normalizePath('files_trashbin/files/' . $file);
+		$target = Filesystem::normalizePath('files/' . $location . '/' . $uniqueFilename);
 		if (!$view->file_exists($source)) {
 			return false;
 		}
 
-		$targetPath = 'files/' . $location . '/' . $filename;
-		$targetDirectoryDoesNotAlreadyExist = $view->is_dir($sourcePath) && ! $view->file_exists($targetPath);
+		// restore file
+		if (!$view->isCreatable(dirname($target))) {
+			throw new NotPermittedException("Can't restore trash item because the target folder is not writable");
+		}
+		$restoreResult = $view->rename($source, $target);
 
-		if ($view->is_file($source) || $targetDirectoryDoesNotAlreadyExist) {
-			$uniqueFilename = self::getUniqueFilename($location, $filename, $view);
-			$target = Filesystem::normalizePath('files/' . $location . '/' . $uniqueFilename);
-			$mtime = $view->filemtime($source);
-
-			// restore file
-			if (!$view->isCreatable(dirname($target))) {
-				// The target directory path does not exist, try creating it.
-				$parentDirectories = explode('/', $location);
-
-				$currentPath = 'files';
-				[$targetStorage,] = $view->resolvePath($currentPath);
-
-				foreach ($parentDirectories as $parentDirectory) {
-					$currentPath = Filesystem::normalizePath($currentPath . '/' . $parentDirectory);
-
-					if ( ! $view->file_exists($currentPath)) {
-						$targetCache = $targetStorage->getCache();
-						$targetCache->insert($currentPath, [
-							'size' => 0,
-							'mtime' => time(),
-							'mimetype' => 'httpd/unix-directory',
-							'permissions' => 31,
-						]);
-
-						// Create file system 'directory'.
-						$targetStorage->mkdir($currentPath);
-					}
-				}
-
-				// If it still does not exist
-				if (!$view->isCreatable(dirname($target))) {
-					// The full path does not exist, try restoring it in the root.
-					$location = '';
-
-					$target = Filesystem::normalizePath('files/' . $location . '/' . $uniqueFilename);
-
-					if (!$view->isCreatable(dirname($target))) {
-						throw new NotPermittedException("Can't restore trash item because the target folder is not writable");
-					}
-				}
-			}
-
-			$restoreResult = $view->rename($source, $target);
-
-			// handle the restore result
-			if ( ! $restoreResult) {
-				return false;
-			}
-
+		// handle the restore result
+		if ($restoreResult) {
 			$fakeRoot = $view->getRoot();
 			$view->chroot('/' . $user . '/files');
-			$view->touch('/' . $location . '/' . $uniqueFilename, $mtime);
+			$view->touch('/' . $location . '/' . $uniqueFilename, time());
 			$view->chroot($fakeRoot);
 			\OCP\Util::emitHook('\OCA\Files_Trashbin\Trashbin', 'post_restore', ['filePath' => Filesystem::normalizePath('/' . $location . '/' . $uniqueFilename),
 				'trashPath' => Filesystem::normalizePath($file)]);
 
 			self::restoreVersions($view, $file, $filename, $uniqueFilename, $location, $timestamp);
-		} else {
-			// Restored item is a directory. We will merge each directory
-			// in the source path with the target path.
-			[$sourceStorage, $sourceInternalPath] = $view->resolvePath($sourcePath);
-			[$targetStorage, $targetInternalPath] = $view->resolvePath($targetPath);
 
-			[$moveSuccessful, $shouldStop] = $targetStorage->moveItemRecursively($sourceStorage, $sourceInternalPath, $targetInternalPath);
-
-			if ($shouldStop || ! $moveSuccessful) {
-				return false;
-			}
-		}
-
-		if ($timestamp) {
-			$query = \OC::$server->getDatabaseConnection()->getQueryBuilder();
-			$query->delete('files_trash')
-				->where($query->expr()->eq('user', $query->createNamedParameter($user)))
-				->andWhere($query->expr()->eq('id', $query->createNamedParameter($filename)))
-				->andWhere($query->expr()->eq('timestamp', $query->createNamedParameter($timestamp)));
-			$query->executeStatement();
-		}
-
-		// Verify all parent directories, if they are empty then delete them.
-		if ($location) {
-			$parentDirectories = explode('/', pathinfo($file)['dirname']);
-			$fullPathParentDirectories = [];
-			$currentPath = '';
-
-			foreach ($parentDirectories as $parentDirectory) {
-				if ( ! $parentDirectory) {
-					continue;
-				}
-
-				$currentPath = $currentPath ? $currentPath . '/' . $parentDirectory : $parentDirectory;
-				$fullPathParentDirectories[] = $currentPath;
+			if ($timestamp) {
+				$query = \OC::$server->getDatabaseConnection()->getQueryBuilder();
+				$query->delete('files_trash')
+					->where($query->expr()->eq('user', $query->createNamedParameter($user)))
+					->andWhere($query->expr()->eq('id', $query->createNamedParameter($filename)))
+					->andWhere($query->expr()->eq('timestamp', $query->createNamedParameter($timestamp)));
+				$query->executeStatement();
 			}
 
-			foreach (array_reverse($fullPathParentDirectories) as $parentDirectory) {
-				$parentDirectoryTrashPath = Filesystem::normalizePath("files_trashbin/files/$parentDirectory");
-				$items = $view->getDirectoryContent($parentDirectoryTrashPath);
-
-				if (count($items) === 0) {
-					if (strpos($parentDirectory, '.d') !== false) {
-						$trashItemResult = explode('.d', $parentDirectory);
-
-						if (count($trashItemResult) === 2) {
-							$trashItemName = $trashItemResult[0];
-							$trashItemTimestamp = $trashItemResult[1];
-
-							$query = \OC::$server->getDatabaseConnection()->getQueryBuilder();
-							$query->delete('files_trash')
-								->where($query->expr()->eq('user', $query->createNamedParameter($user)))
-								->andWhere($query->expr()->eq('id', $query->createNamedParameter($trashItemName)))
-								->andWhere($query->expr()->eq('timestamp', $query->createNamedParameter($trashItemTimestamp)));
-							$query->executeStatement();
-						}
-					}
-
-					$view->unlink($parentDirectoryTrashPath);
-
-					continue;
-				}
-
-				break;
-			}
+			return true;
 		}
 
-		return true;
+		return false;
 	}
 
 	/**
@@ -955,7 +669,7 @@ class Trashbin {
 			$query = \OC::$server->getDatabaseConnection()->getQueryBuilder();
 			$query->delete('files_trash')
 				->where($query->expr()->eq('user', $query->createNamedParameter($user)))
-				->andWhere($query->expr()->eq('id', $query->createNamedParameter(substr($filename, 1)))) // Remove forward '/'
+				->andWhere($query->expr()->eq('id', $query->createNamedParameter($filename)))
 				->andWhere($query->expr()->eq('timestamp', $query->createNamedParameter($timestamp)));
 			$query->executeStatement();
 
@@ -1199,14 +913,9 @@ class Trashbin {
 					$size += self::delete($filename, $user, $timestamp);
 					$count++;
 				} catch (\OCP\Files\NotPermittedException $e) {
-					\OC::$server->get(LoggerInterface::class)->warning('Removing "' . $filename . '" from trashbin failed.',
-						[
-							'exception' => $e,
-							'app' => 'files_trashbin',
-						]
-					);
+					\OC::$server->getLogger()->logException($e, ['app' => 'files_trashbin', 'level' => \OCP\ILogger::WARN, 'message' => 'Removing "' . $filename . '" from trashbin failed.']);
 				}
-				\OC::$server->get(LoggerInterface::class)->info(
+				\OC::$server->getLogger()->info(
 					'Remove "' . $filename . '" from trashbin because it exceeds max retention obligation term.',
 					['app' => 'files_trashbin']
 				);
@@ -1302,7 +1011,7 @@ class Trashbin {
 		$query = new CacheQueryBuilder(
 			\OC::$server->getDatabaseConnection(),
 			\OC::$server->getSystemConfig(),
-			\OC::$server->get(LoggerInterface::class)
+			\OC::$server->getLogger()
 		);
 		$normalizedParentPath = ltrim(Filesystem::normalizePath(dirname('files_trashbin/versions/'. $filename)), '/');
 		$parentId = $cache->getId($normalizedParentPath);
@@ -1335,6 +1044,19 @@ class Trashbin {
 		}
 
 		return $versions;
+	}
+
+	/**
+	 * find unique extension for restored folder if a root folder with same name exist
+	 *
+	 * @param string $folder
+	 * @return string with unique extension
+	 */
+	private static function getUniqueFolderName($location) {
+		$l = \OC::$server->getL10N('files_trashbin');
+
+
+		return $location . " (" . $l->t("restored") . ")";
 	}
 
 	/**
