@@ -34,6 +34,8 @@ use OC\Files\FileInfo;
 use OCP\Constants;
 use OCP\Files\Cache\ICacheEntry;
 
+use function GuzzleHttp\Psr7\str;
+
 class Helper {
 	/**
 	 * Retrieves the contents of a trash bin directory.
@@ -108,6 +110,103 @@ class Helper {
 			return \OCA\Files\Helper::sortFiles($result, $sortAttribute, $sortDescending);
 		}
 		return $result;
+	}
+
+	public static function getTrashFilesById($dir, $user)
+	{
+		if($dir === '/') {
+			$dir = $dirname = '.';
+		} else {
+			$dirname = preg_replace('/\.d(.*?)\//', '/', $dir . '/');
+			$dirname = trim($dirname, '/');
+		}
+		$prefix = 'files_trashbin/files';
+		$view = new \OC\Files\View('/' . $user . '/' . $prefix);
+		$mount = $view->getMount($dir);
+		$storage = $mount->getStorage();
+		$absoluteDir = $view->getAbsolutePath($dir);
+		$result = [];
+
+		$query = \OC::$server->getDatabaseConnection()->getQueryBuilder();
+		$query->select('id', 'timestamp', 'location')
+			->from('files_trash')
+			->where($query->expr()->eq('user', $query->createNamedParameter($user)));
+		if($dirname === '.') {
+			$query->andWhere($query->expr()->notlike('location', $query->createNamedParameter('%/%/%')));
+		} else {
+			$depthLimit = substr_count($dirname, '/') + 2;
+			$query->andWhere($query->expr()->like('location', $query->createNamedParameter($dirname . '%')));
+			$query->andWhere($query->expr()->notlike('location', $query->createNamedParameter(str_repeat('%/', $depthLimit) . '%')));
+		}
+		$result = $query->executeQuery();
+		$array = [];
+		// exit(var_dump($result->fetchAll()));
+		while ($row = $result->fetch()) {
+			$location = $row['location'];
+			if(strpos($location, '/') && $dirname === '.') {
+				$location = substr($location, 0, strpos($location, '/'));
+			}
+			if($location !== $dirname && array_key_exists($location, $array)) {
+				continue;
+			}
+
+			if($location === $dirname) {
+				["id" => $id, "timestamp" => $timestamp,] = $row;
+				$array['root'][] = ["name" => $id, "deleted_at" => $timestamp];
+			} else {
+				$locationArr = explode('/', $location);
+				$array[end($locationArr)] = ['type' => 'fakedir', 'deleted_at' => $row['timestamp']];
+			}
+		}
+		$result->closeCursor();
+
+		$files = $array['root'];
+		unset($array['root']);
+		$entries = [];
+
+		foreach($files as $key => $file) { // lists files deleted from root
+			[$name, $timestamp] = [$file['name'], $file['deleted_at']];
+			$filename = $file['name'] . '.d' . $file['deleted_at'];
+			$file = $storage->getCache()->get($prefix . '/' . $filename);
+			if(!$file) {
+				continue;
+			}
+			$type = $file->getMimeType();
+
+			$i = [
+				'name' => $name,
+				'mtime' => $timestamp,
+				'mimetype' => $type === 'httpd/unix-directory' ? $type : \OC::$server->getMimeTypeDetector()->detectPath($name),
+				'type' => $type,
+				'directory' => ($dir === '/') ? '' : $dir,
+				'size' => $file->getSize(),
+				'etag' => '',
+				'permissions' => Constants::PERMISSION_ALL - Constants::PERMISSION_SHARE,
+				'fileid' => $file->getId(),
+				'extraData' => $name
+			];
+
+			$entries[] = new FileInfo($absoluteDir . '/' . $i['name'], $storage, $prefix . '/' . $i['name'], $i, $mount);
+		}
+
+		foreach($array as $key => $dir) { // create fake directories from which files were deleted
+			if($dir['type'] === 'fakedir') {
+				$i = [
+					'name' => $key,
+					'mtime' => $dir['deleted_at'],
+					'mimetype' => 'httpd/unix-directory',
+					'type' => 'dir',
+					'directory' => '/',
+					'size' => 0,
+					'etag' => '',
+					'permissions' => Constants::PERMISSION_ALL - Constants::PERMISSION_SHARE,
+					'fileid' => 0,
+				];
+				$entries[] = new FileInfo($absoluteDir . '/' . $i['name'], $storage, $prefix . '/' . $i['name'], $i, $mount);
+			}
+		}
+
+		return $entries;
 	}
 
 	/**
