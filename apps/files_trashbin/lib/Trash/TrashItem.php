@@ -24,6 +24,7 @@ namespace OCA\Files_Trashbin\Trash;
 
 use OCP\Files\FileInfo;
 use OCP\IUser;
+use OC\Files\View;
 
 class TrashItem implements ITrashItem {
 	/** @var ITrashBackend */
@@ -72,7 +73,15 @@ class TrashItem implements ITrashItem {
 	}
 
 	public function isRootItem(): bool {
-		return substr_count($this->getTrashPath(), '/') === 1;
+		$user = \OC_User::getUser();
+		$view = new View("/$user/files_trashbin/files");
+		$fullPath = $this->getTrashPath();
+		$itemPath = substr($fullPath, 0, strrpos($fullPath, '/'));
+		if(! $view->is_dir($itemPath)) { // if dir does not exist, path was created automatically and item is in root
+			return true;
+		}
+
+		return false;
 	}
 
 	public function getUser(): IUser {
