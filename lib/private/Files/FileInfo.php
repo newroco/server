@@ -417,4 +417,9 @@ class FileInfo implements \OCP\Files\FileInfo, \ArrayAccess {
 	public function getUploadTime(): int {
 		return (int) $this->data['upload_time'];
 	}
+
+	public function isFakeDir(): bool
+	{
+		return $this->getType() === 'dir' && isset($this->data['fakeDir']) && $this->data['fakeDir'] ? true : false; 
+	}
 }

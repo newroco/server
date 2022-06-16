@@ -195,4 +195,9 @@ class TrashItem implements ITrashItem {
 	public function getUploadTime(): int {
 		return $this->fileInfo->getUploadTime();
 	}
+
+	public function isFakeDir()
+	{
+		return $this->fileInfo->isFakeDir();
+	}
 }

@@ -34,8 +34,6 @@ use OC\Files\FileInfo;
 use OCP\Constants;
 use OCP\Files\Cache\ICacheEntry;
 
-use function GuzzleHttp\Psr7\str;
-
 class Helper {
 	/**
 	 * Retrieves the contents of a trash bin directory.
@@ -126,7 +124,6 @@ class Helper {
 		$storage = $mount->getStorage();
 		$absoluteDir = $view->getAbsolutePath($dir);
 		$result = [];
-
 		$query = \OC::$server->getDatabaseConnection()->getQueryBuilder();
 		$query->select('id', 'timestamp', 'location')
 			->from('files_trash')
@@ -140,7 +137,6 @@ class Helper {
 		}
 		$result = $query->executeQuery();
 		$array = [];
-		// exit(var_dump($result->fetchAll()));
 		while ($row = $result->fetch()) {
 			$location = $row['location'];
 			if(strpos($location, '/') && $dirname === '.') {
@@ -178,7 +174,7 @@ class Helper {
 				'mtime' => $timestamp,
 				'mimetype' => $type === 'httpd/unix-directory' ? $type : \OC::$server->getMimeTypeDetector()->detectPath($name),
 				'type' => $type,
-				'directory' => ($dir === '/') ? '' : $dir,
+				'directory' => '/',
 				'size' => $file->getSize(),
 				'etag' => '',
 				'permissions' => Constants::PERMISSION_ALL - Constants::PERMISSION_SHARE,
@@ -201,6 +197,7 @@ class Helper {
 					'etag' => '',
 					'permissions' => Constants::PERMISSION_ALL - Constants::PERMISSION_SHARE,
 					'fileid' => 0,
+					'fakeDir' => true
 				];
 				$entries[] = new FileInfo($absoluteDir . '/' . $i['name'], $storage, $prefix . '/' . $i['name'], $i, $mount);
 			}
