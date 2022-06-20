@@ -49,7 +49,7 @@ class Helper {
 		$result = [];
 		$timestamp = null;
 
-		$view = new \OC\Files\View('/' . $user . '/files_trashbin/files');
+		$view = new \OC\Files\View('/' . $user . '/files_trashbin/files/');
 
 		if (ltrim($dir, '/') !== '' && !$view->is_dir($dir)) {
 			throw new \Exception('Directory does not exists');
@@ -173,7 +173,7 @@ class Helper {
 				'name' => $name,
 				'mtime' => $timestamp,
 				'mimetype' => $type === 'httpd/unix-directory' ? $type : \OC::$server->getMimeTypeDetector()->detectPath($name),
-				'type' => $type,
+				'type' => $type === 'httpd/unix-directory' ? 'dir' : $type,
 				'directory' => '/',
 				'size' => $file->getSize(),
 				'etag' => '',

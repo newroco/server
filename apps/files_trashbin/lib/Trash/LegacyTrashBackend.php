@@ -75,8 +75,15 @@ class LegacyTrashBackend implements ITrashBackend {
 	}
 
 	public function listTrashFolder(ITrashItem $folder): array {
+		$folderInTrash = $folder->getName() . '.d' . $folder->getDeletedTime();
 		$user = $folder->getUser();
-		$entries = Helper::getTrashFilesById($folder->getTrashPath(), $user->getUID());
+		$userName = $user->getUID();
+		$view = new View("/$userName/files_trashbin/files/");
+		if($view->is_dir($folderInTrash)) {
+			$entries = Helper::getTrashFiles($folderInTrash, $userName);
+		} else {
+			$entries = Helper::getTrashFilesById($folder->getTrashPath(), $userName);
+		}
 		return $this->mapTrashItems($entries, $user, $folder);
 	}
 
