@@ -206,6 +206,17 @@ class Helper {
 		return $entries;
 	}
 
+	public static function getItemsForFolder($location, $user)
+	{
+		$query = \OC::$server->getDatabaseConnection()->getQueryBuilder();
+		$query->select(['id', 'timestamp'])
+			->from('files_trash')
+			->where($query->expr()->eq('user', $query->createNamedParameter($user)))
+			->andWhere($query->expr()->like('location', $query->createNamedParameter($location . '%')));
+
+		return $query->executeQuery()->fetchAll();
+	}
+
 	/**
 	 * Format file infos for JSON
 	 *

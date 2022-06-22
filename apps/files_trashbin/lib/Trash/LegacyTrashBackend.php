@@ -88,11 +88,60 @@ class LegacyTrashBackend implements ITrashBackend {
 	}
 
 	public function restoreItem(ITrashItem $item) {
+		if($item->isFakeDir()) {
+			return $this->restoreAllItemsFromFakeFolder($item->getUser()->getUID(), $item);
+		}
 		Trashbin::restore($item->getTrashPath(), $item->getName(), $item->getDeletedTime());
+	}
+
+	/**
+	 * Removes all items from a fake folder
+	 * 
+	 * @param string $user
+	 * @param ITrashItem $folder
+	 * 
+	 * @return void
+	 */
+	private function removeAllItemsFromFakeFolder($user, ITrashItem $folder): void
+	{
+		$location = str_replace('.d' . $folder->getDeletedTime(), '', trim($folder->getTrashPath(), '/'));
+		$folderItems = Helper::getItemsForFolder($location, $user);
+
+		foreach($folderItems as $item) {
+			$item = array_values($item);
+			array_splice($item, 1, 0, $user);
+			Trashbin::delete(...$item);
+		}
+	}
+
+	/**
+	 * Restores all items from a fake folder
+	 * 
+	 * @param string $user
+	 * @param ITrashItem $folder
+	 * 
+	 * @return void
+	 */
+	private function restoreAllItemsFromFakeFolder($user, ITrashItem $folder): void
+	{
+		$location = str_replace('.d' . $folder->getDeletedTime(), '', trim($folder->getTrashPath(), '/'));
+		$folderItems = Helper::getItemsForFolder($location, $user);
+
+		foreach($folderItems as $item) {
+			$file = $item['id'] . '.d' . $item['timestamp'];
+			$filename = $item['id'];
+			$timestamp = $item['timestamp'];
+
+			Trashbin::restore($file, $filename, $timestamp);
+		}
 	}
 
 	public function removeItem(ITrashItem $item) {
 		$user = $item->getUser();
+		if($item->isFakeDir()) {
+			return $this->removeAllItemsFromFakeFolder($user->getUID(), $item);
+		}
+
 		if ($item->isRootItem()) {
 			$args = [$item->getName(), $user->getUID(), $item->getDeletedTime()];
 		} else {
