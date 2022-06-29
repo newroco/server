@@ -473,6 +473,7 @@ class Trashbin {
 			if ($location === false) {
 				\OC::$server->get(LoggerInterface::class)->error('trash bin database inconsistent! ($user: ' . $user . ' $filename: ' . $filename . ', $timestamp: ' . $timestamp . ')', ['app' => 'files_trashbin']);
 			} else {
+				$file = $filename . '.d' . $timestamp;
 				// if location no longer exists, restore file in the root directory
 				if ($location !== '/' &&
 					(!$view->is_dir('files/' . $location) ||
