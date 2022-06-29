@@ -39,6 +39,7 @@ class PropfindPlugin extends ServerPlugin {
 	public const TRASHBIN_ORIGINAL_LOCATION = '{http://nextcloud.org/ns}trashbin-original-location';
 	public const TRASHBIN_DELETION_TIME = '{http://nextcloud.org/ns}trashbin-deletion-time';
 	public const TRASHBIN_TITLE = '{http://nextcloud.org/ns}trashbin-title';
+	public const TRASHBIN_FAKE_DIRECTORY = '{http://nextcloud.org/ns}trashbin-fake-directory';
 
 	/** @var Server */
 	private $server;
@@ -63,6 +64,10 @@ class PropfindPlugin extends ServerPlugin {
 		if (!($node instanceof ITrash)) {
 			return;
 		}
+
+		$propFind->handle(self::TRASHBIN_FAKE_DIRECTORY, function () use ($node) {
+			return $node->getFileInfo()->isFakeDir();
+		});
 
 		$propFind->handle(self::TRASHBIN_FILENAME, function () use ($node) {
 			return $node->getFilename();

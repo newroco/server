@@ -1657,6 +1657,10 @@
 				tr.attr('data-icon', dataIcon);
 			}
 
+			if(type === 'dir' && fileData.fakeDir == 1) {
+				tr.attr('data-fakedir', true);
+			}
+
 			if (fileData.mountType) {
 				// dirInfo (parent) only exist for the "real" file list
 				if (this.dirInfo.id) {

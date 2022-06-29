@@ -70,28 +70,84 @@ class LegacyTrashBackend implements ITrashBackend {
 	}
 
 	public function listTrashRoot(IUser $user): array {
-		$entries = Helper::getTrashFiles('/', $user->getUID());
+		$entries = Helper::getTrashFilesById('/', $user->getUID());
 		return $this->mapTrashItems($entries, $user);
 	}
 
 	public function listTrashFolder(ITrashItem $folder): array {
+		$folderInTrash = $folder->getName() . '.d' . $folder->getDeletedTime();
 		$user = $folder->getUser();
-		$entries = Helper::getTrashFiles($folder->getTrashPath(), $user->getUID());
-		return $this->mapTrashItems($entries, $user ,$folder);
+		$userName = $user->getUID();
+		$view = new View("/$userName/files_trashbin/files/");
+		if($view->is_dir($folderInTrash)) {
+			$entries = Helper::getTrashFiles($folderInTrash, $userName);
+		} else {
+			$entries = Helper::getTrashFilesById($folder->getTrashPath(), $userName);
+		}
+		return $this->mapTrashItems($entries, $user, $folder);
 	}
 
 	public function restoreItem(ITrashItem $item) {
-		Trashbin::restore($item->getTrashPath(), $item->getName(), $item->isRootItem() ? $item->getDeletedTime() : null);
+		if($item->isFakeDir()) {
+			return $this->restoreAllItemsFromFakeFolder($item->getUser()->getUID(), $item);
+		}
+		Trashbin::restore($item->getTrashPath(), $item->getName(), $item->getDeletedTime());
+	}
+
+	/**
+	 * Removes all items from a fake folder
+	 * 
+	 * @param string $user
+	 * @param ITrashItem $folder
+	 * 
+	 * @return void
+	 */
+	private function removeAllItemsFromFakeFolder($user, ITrashItem $folder): void
+	{
+		$location = str_replace('.d' . $folder->getDeletedTime(), '', trim($folder->getTrashPath(), '/'));
+		$folderItems = Helper::getItemsForFolder($location, $user);
+
+		foreach($folderItems as $item) {
+			$item = array_values($item);
+			array_splice($item, 1, 0, $user);
+			Trashbin::delete(...$item);
+		}
+	}
+
+	/**
+	 * Restores all items from a fake folder
+	 * 
+	 * @param string $user
+	 * @param ITrashItem $folder
+	 * 
+	 * @return void
+	 */
+	private function restoreAllItemsFromFakeFolder($user, ITrashItem $folder): void
+	{
+		$location = str_replace('.d' . $folder->getDeletedTime(), '', trim($folder->getTrashPath(), '/'));
+		$folderItems = Helper::getItemsForFolder($location, $user);
+
+		foreach($folderItems as $item) {
+			$file = $item['id'] . '.d' . $item['timestamp'];
+			$filename = $item['id'];
+			$timestamp = $item['timestamp'];
+
+			Trashbin::restore($file, $filename, $timestamp);
+		}
 	}
 
 	public function removeItem(ITrashItem $item) {
 		$user = $item->getUser();
-		if ($item->isRootItem()) {
-			$path = substr($item->getTrashPath(), 0, -strlen('.d' . $item->getDeletedTime()));
-			Trashbin::delete($path, $user->getUID(), $item->getDeletedTime());
-		} else {
-			Trashbin::delete($item->getTrashPath(), $user->getUID(), null);
+		if($item->isFakeDir()) {
+			return $this->removeAllItemsFromFakeFolder($user->getUID(), $item);
 		}
+
+		if ($item->isRootItem()) {
+			$args = [$item->getName(), $user->getUID(), $item->getDeletedTime()];
+		} else {
+			$args = [$item->getTrashPath(), $user->getUID(), null];
+		}
+		Trashbin::delete(...$args);
 	}
 
 	public function moveToTrash(IStorage $storage, string $internalPath): bool {
